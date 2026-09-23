@@ -4,6 +4,8 @@ A two-player, same-keyboard lunar-lander duel. Two ships, one gravity well, one 
 
 This is a native Linux (Wayland/X11) rewrite of **GravityShips**, a game Terry McGuinness wrote in Xcode on macOS in 2015.
 
+![GravityShips2.o screenshot](docs/screenshot.png)
+
 ---
 
 ## Gameplay
