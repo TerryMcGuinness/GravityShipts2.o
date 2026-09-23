@@ -149,7 +149,7 @@ This repo is a clean, standalone port that builds only against system libraries 
 ## Credits
 
 - **Game design and original implementation:** Terry McGuinness (2015).
-- **Linux rewrite, build system, procedural sound engine, bug fixes:** GitHub Copilot (Claude), working with Terry McGuinness (2026).
+- **Linux port and refactor:** GitHub Copilot (Claude Opuse 5.5), working with Terry McGuinness (2026). That covers the build system, the platform layer, the procedural sound engine and the bug fixes, all done single-shot.
 - Original project scaffold: Tom Dalling, [opengl-series](https://github.com/tomdalling/opengl-series) (Apache 2.0).
 - Vendored libraries:
   - [stb_image / stb_easy_font](https://github.com/nothings/stb) by Sean Barrett (public domain / MIT).
