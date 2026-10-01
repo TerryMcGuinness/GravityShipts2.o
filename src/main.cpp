@@ -307,7 +307,7 @@ int main(void)
         ship1.rotDir = ship2.rotDir = 0;
         ship1.thrusting = ship2.thrusting = false;
 
-        if( ship1.score !=5 && ship2.score !=5 )
+        if( ship1.score != WIN_SCORE && ship2.score != WIN_SCORE )
         {
             if(glfwGetKey(window, 'Q')) {
                 ship1.rotateCounterClockWise();
@@ -345,27 +345,27 @@ int main(void)
                 sfx::play(sfx::Alarm, ships[i]->spaceShip.offset.x, 1.f, i);
             lowFuel[i] = low;
         }
-        if (!gameOver && (ship1.score == 5 || ship2.score == 5)) {
+        if (!gameOver && (ship1.score == WIN_SCORE || ship2.score == WIN_SCORE)) {
             gameOver = true;
-            Ship& loser = ship1.score == 5 ? ship2 : ship1;
-            Ship& winner = ship1.score == 5 ? ship1 : ship2;
+            Ship& loser = ship1.score == WIN_SCORE ? ship2 : ship1;
+            Ship& winner = ship1.score == WIN_SCORE ? ship1 : ship2;
             sfx::play(sfx::Explosion, loser.spaceShip.offset.x);
             sfx::play(sfx::Win, winner.spaceShip.offset.x);
         }
         
-        if( ship1.score == 5 ) {
+        if( ship1.score == WIN_SCORE ) {
             for (int j=0;j<100;j++) {
                 ship2.explode();
             }
         }
-        if( ship2.score == 5 ) {
+        if( ship2.score == WIN_SCORE ) {
             for (int j=0;j<100;j++) {
                 ship1.explode();
             }
         }
         
-        if( ship2.score != 5 ) ship1.drawShip() ;
-        if( ship1.score != 5 ) ship2.drawShip() ;
+        if( ship2.score != WIN_SCORE ) ship1.drawShip() ;
+        if( ship1.score != WIN_SCORE ) ship2.drawShip() ;
         
  
         updateShip(ship1);

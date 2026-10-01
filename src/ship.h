@@ -42,6 +42,7 @@ const float VELOCITY_FACTOR = 0.008;
 const float ANGLE_FACTOR    = 0.0004;
 
 const float GROUND = -1.0;
+const int   WIN_SCORE = 5;
 
 const int   PELLET_MAX         = 24;
 const int   AMMO_CAPACITY      = 6;
@@ -55,6 +56,8 @@ const float RECOIL             = 0.0006;
 const float PELLET_KICK        = 0.25;   // fraction of pellet momentum given to the target
 const float PELLET_SPIN_KICK   = 8.0;
 const float PICKUP_RADIUS      = 0.03;
+const float PELLET_BOUNCE      = 0.6;    // coefficient of restitution
+const int   PELLET_ARM_FRAMES  = 8;      // own ship is immune until the round clears the muzzle
 
 struct Point2D {
     GLfloat x;

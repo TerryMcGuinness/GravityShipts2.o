@@ -131,6 +131,52 @@ bool pointInPolygon(int nvert, Point2D* points, float testx, float testy)
     return c;
 }
 
+// Reflect relative velocity about unit normal n: v' = v_body + (v - v_body) - (1+e)((v - v_body)·n) n.
+static void reflectPellet(Pellet& p, Point2D n, Point2D vBody) {
+    float rx = p.vel.x - vBody.x, ry = p.vel.y - vBody.y;
+    float vn = rx * n.x + ry * n.y;
+    if (vn < 0) {
+        rx -= (1 + PELLET_BOUNCE) * vn * n.x;
+        ry -= (1 + PELLET_BOUNCE) * vn * n.y;
+    }
+    p.vel = {vBody.x + rx, vBody.y + ry};
+}
+
+// Pellet is inside a convex polygon: push it out through the nearest edge and reflect.
+static void bounceOffConvex(Pellet& p, const Point2D* poly, int n, Point2D vBody) {
+    float area2 = 0;
+    for (int i = 0, j = n - 1; i < n; j = i++)
+        area2 += poly[j].x * poly[i].y - poly[i].x * poly[j].y;
+    float orient = area2 > 0 ? 1.f : -1.f;
+
+    float best = -1e30f;
+    Point2D bestN = {0, 1};
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+        float ex = poly[i].x - poly[j].x, ey = poly[i].y - poly[j].y;
+        float len = sqrtf(ex * ex + ey * ey);
+        if (len == 0) continue;
+        Point2D nrm = {orient * ey / len, -orient * ex / len};
+        float d = (p.pos.x - poly[j].x) * nrm.x + (p.pos.y - poly[j].y) * nrm.y;
+        if (d > best) { best = d; bestN = nrm; }
+    }
+    float push = PELLET_RADIUS - best;
+    p.pos.x += bestN.x * push;
+    p.pos.y += bestN.y * push;
+    reflectPellet(p, bestN, vBody);
+}
+
+static bool bounceOffCircle(Pellet& p, Point2D c, float r) {
+    float dx = p.pos.x - c.x, dy = p.pos.y - c.y;
+    float rr = r + PELLET_RADIUS;
+    float d2 = dx * dx + dy * dy;
+    if (d2 >= rr * rr || d2 == 0) return false;
+    float d = sqrtf(d2);
+    Point2D n = {dx / d, dy / d};
+    p.pos = {c.x + n.x * rr, c.y + n.y * rr};
+    reflectPellet(p, n, {0, 0});
+    return true;
+}
+
 
 bool
 Ship::shipInPolygon(SpaceShip spaceShip, Point2D* polygon ) {
@@ -686,9 +732,6 @@ Ship::updatePellets(Ship& other) {
                 float dx = s->spaceShip.offset.x - p.pos.x, dy = s->spaceShip.offset.y - p.pos.y;
                 if (dx * dx + dy * dy < PICKUP_RADIUS * PICKUP_RADIUS) {
                     ++s->ammo;
-
-    string rounds = " Ammo:  " + string(ammo, 'o') + string(AMMO_CAPACITY - ammo, '.');
-    drawText(rounds, statTextPosX, statTextPosY-20);
                     p.active = false;
                     sfx::play(sfx::Reload, p.pos.x, (float)s->ammo / AMMO_CAPACITY, s->id);
                     break;
@@ -711,17 +754,32 @@ Ship::updatePellets(Ship& other) {
             continue;
         }
 
-        if (pointInPolygon(BASE, spaceShip.landingPad, p.pos.x, p.pos.y) ||
-            pointInPolygon(BASE, other.spaceShip.landingPad, p.pos.x, p.pos.y)) {
-            p.active = false;
-            continue;
+        Ship* ships[2] = {this, &other};
+        bool hit = false;
+        for (Ship* s : ships) {
+            if (s == this && p.life < PELLET_ARM_FRAMES) continue;
+            const Point2D* h = s->spaceShip.location;
+            Point2D hull[3] = {h[0], h[2], h[4]};
+            if (pointInPolygon(3, hull, p.pos.x, p.pos.y)) {
+                s->bump(p);
+                bounceOffConvex(p, hull, 3, s->velocity);
+                hit = true;
+                break;
+            }
         }
+        if (hit) continue;
 
-        const Point2D* h = other.spaceShip.location;
-        Point2D hull[3] = {h[0], h[2], h[4]};
-        if (pointInPolygon(3, hull, p.pos.x, p.pos.y)) {
-            other.bump(p);
-            p.active = false;
+        for (Ship* s : ships) {
+            if (pointInPolygon(BASE, s->spaceShip.landingPad, p.pos.x, p.pos.y)) {
+                bounceOffConvex(p, s->spaceShip.landingPad, BASE, {0, 0});
+                sfx::play(sfx::Thud, p.pos.x, 0.15f);
+                break;
+            }
+            const ShipBall& b = s->spaceShip.ball;
+            if (!b.ballhit && bounceOffCircle(p, b.ballLocation, b.ballSize)) {
+                sfx::play(sfx::Boing, p.pos.x, 0.5f);
+                break;
+            }
         }
     }
 }
@@ -784,7 +842,7 @@ Ship::storeOtherShip( SpaceShip spaceShip ) {
 void
 Ship::displayShipScore(void){
     glColor3f(shipColor[0], shipColor[1], shipColor[2]);
-    for( int i= 0; i < score ; ++i) {
+    for( int i= 0; i < WIN_SCORE - score ; ++i) {
         glPushMatrix();
         glTranslatef(scoreLocation+(float)i*0.05,0.976,0.0);
         drawCircle(0.01f);
@@ -815,4 +873,7 @@ Ship::displayShipStatus(void) {
     
     drawText(velocityX, statTextPosX, statTextPosY-10);
     drawText(velocityY, statTextPosX, statTextPosY-15);
+
+    string rounds = " Ammo:  " + string(ammo, 'o') + string(AMMO_CAPACITY - ammo, '.');
+    drawText(rounds, statTextPosX, statTextPosY-20);
 }
