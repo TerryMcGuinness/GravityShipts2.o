@@ -103,6 +103,8 @@ void initialShipPosition(Ship& ship1, Ship& ship2) {
     }
     ship2.reset(initalPosition);
     ship2.setLandingLocation(baseLocation, 2*1.75);
+    ship1.storeOtherShip(ship2.spaceShip);
+    ship2.storeOtherShip(ship1.spaceShip);
 }
 
 void
@@ -231,6 +233,8 @@ int main(void)
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
     glfwSetKeyCallback(window, key_callback);
+    // Pin the pointer so focus-follows-mouse can't steal keyboard focus to another monitor.
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     
     ShipStatusConsts ship1Stats ;
     ShipStatusConsts ship2Stats ;
@@ -313,6 +317,9 @@ int main(void)
             if(glfwGetKey(window,'X')) {
                 ship1.thrust();
             }
+            if(glfwGetKey(window,'Z') || glfwGetKey(window,'C')) {
+                ship1.fire();
+            }
 
             if(glfwGetKey(window, '[')) {
                 ship2.rotateCounterClockWise();
@@ -322,8 +329,8 @@ int main(void)
             if(glfwGetKey(window,'/')) {
                 ship2.thrust();
             }
-            if(glfwGetKey(window,'.')) {
-                ship2.fuel -= 5;
+            if(glfwGetKey(window,'.') || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT)) {
+                ship2.fire();
             }
         }
         
@@ -363,6 +370,11 @@ int main(void)
  
         updateShip(ship1);
         updateShip(ship2);
+
+        ship1.updatePellets(ship2);
+        ship2.updatePellets(ship1);
+        ship1.drawPellets();
+        ship2.drawPellets();
         
         ship1.displayShipStatus();
         ship2.displayShipStatus();

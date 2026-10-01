@@ -27,8 +27,16 @@ The first player to **5 points** wins.
 | Rotate CCW | `Q` | `[` |
 | Rotate CW | `W` | `]` |
 | Thrust | `X` | `/` |
+| Fire | `Z` or `C` | `.` or `Right Shift` |
 
-`Esc` quits. (`.` drains Player 2's fuel. It is a leftover debug key, kept on purpose.)
+`Esc` quits.
+
+### Pellet gun
+
+Each ship fires small pellets from its nose. They leave at muzzle speed plus the ship's own velocity, fall under gravity, and give the shooter a little recoil. A hit knocks the target back and spins it, harder the further off-centre the hit is. That's enough to spoil a landing or push someone off their pad. Pellets stop dead on either landing pad.
+
+- **Magazine:** 6 rounds, shown as `Ammo: ooo...` under the fuel readout. Sitting on your own pad reloads one round every ¾ s, at the same time as refuelling.
+- **Salvage:** spent pellets lie on the ground for 15 s, dimmed. Any ship that flies over one with room in its magazine picks it up, including the enemy's.
 
 ### Sound
 
@@ -48,6 +56,10 @@ All the sound is synthesised in real time. There are no sample files. Each sound
 | Ball pickup | Upward zip |
 | Point scored | Four-note jingle |
 | Hitting the other player's ball | Boing |
+| Fire | Pneumatic pop |
+| Fire with empty magazine | Dry click |
+| Pellet hits a ship | High metallic ping |
+| Round reloaded / salvaged | Ratchet tick that rises in pitch as the magazine fills |
 | Victory | Long explosion with crackle and sub-bass, plus a brass fanfare |
 | Game start | Power-up sweep |
 

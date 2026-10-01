@@ -43,6 +43,19 @@ const float ANGLE_FACTOR    = 0.0004;
 
 const float GROUND = -1.0;
 
+const int   PELLET_MAX         = 24;
+const int   AMMO_CAPACITY      = 6;
+const int   FIRE_COOLDOWN      = 12;     // frames between shots
+const int   AMMO_RECHARGE      = 45;     // frames per round while sitting on own pad
+const int   PELLET_REST_FRAMES = 900;    // spent rounds lie on the ground this long
+const float PELLET_RADIUS      = 0.004;
+const float PELLET_GRAVITY     = 0.0001;
+const float MUZZLE_SPEED       = 0.010;
+const float RECOIL             = 0.0006;
+const float PELLET_KICK        = 0.25;   // fraction of pellet momentum given to the target
+const float PELLET_SPIN_KICK   = 8.0;
+const float PICKUP_RADIUS      = 0.03;
+
 struct Point2D {
     GLfloat x;
     GLfloat y;
@@ -76,6 +89,14 @@ struct ShipBall {
     float ballSize ;
     bool ballhit ;
     bool ballhitonce ;
+};
+
+struct Pellet {
+    Point2D pos;
+    Point2D vel;
+    int  life;
+    bool active;
+    bool resting;
 };
 
 #define BASE_THICKNESS 0.01
@@ -119,7 +140,7 @@ private:
     Point2D rightThrust[2];
     GLfloat shipColor[3];
     bool shipInPolygon(SpaceShip,Point2D*);
-    void bounceOffBase(Point2D*);
+    bool bounceOffBase(const Point2D*);
 
 public:
     
@@ -172,6 +193,15 @@ public:
      
     bool isRefueling;
     int increaseFuelInc;
+
+    Pellet pellets[PELLET_MAX];
+    int  ammo;
+    int  fireCooldown;
+    int  ammoRecharge;
+    void fire(void);
+    void updatePellets(Ship& other);
+    void drawPellets(void);
+    void bump(const Pellet& p);
     
     bool pointWasInPolygon ;
 

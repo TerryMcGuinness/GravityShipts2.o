@@ -55,7 +55,8 @@ struct EngineState {
 EngineState eng[2];
 
 const float kDur[NumEvents] = {
-    0.40f, 0.45f, 0.90f, 1.30f, 0.30f, 0.80f, 0.70f, 0.10f, 4.0f, 2.4f, 0.65f, 0.14f, 1.1f
+    0.40f, 0.45f, 0.90f, 1.30f, 0.30f, 0.80f, 0.70f, 0.10f, 4.0f, 2.4f, 0.65f, 0.14f, 1.1f,
+    0.12f, 0.05f, 0.35f, 0.08f
 };
 
 void spawn(const Msg& m) {
@@ -195,6 +196,24 @@ float render(Voice& v) {
         s = v.lp[0] * fminf(1.f, t / 0.05f) * (t < 0.85f ? 1.f : expf(-(t - 0.85f) * 20.f)) * 0.12f;
         break;
     }
+    case Fire: {                       // pneumatic pop: noise burst + falling blip
+        float f = (v.ship == 1 ? 1500.f : 1200.f) * expf(-t * 30.f) + 200.f;
+        v.ph[0] += f * DT;
+        v.lp[0] += lpCoef(3500.f) * (noise() - v.lp[0]);
+        s = (v.lp[0] * 1.6f * expf(-t * 70.f) + sinf(TAU * v.ph[0]) * expf(-t * 35.f) * 0.5f) * 0.35f;
+        break;
+    }
+    case Dry:                          // empty click
+        s = noise() * expf(-t * 400.f) * 0.3f + sinf(TAU * 2400.f * t) * expf(-t * 250.f) * 0.15f;
+        break;
+    case Ping:                         // pellet rings the hull
+        s = metal(820.f + 110.f * v.ship, t, 1.8f) * 0.3f + noise() * expf(-t * 200.f) * 0.2f;
+        break;
+    case Reload: {                     // ratchet tick, pitch climbs as magazine fills
+        float f = 900.f + 900.f * v.p;
+        s = (sinf(TAU * f * t) * expf(-t * 60.f) + noise() * expf(-t * 300.f) * 0.5f) * 0.2f;
+        break;
+    }
     default: break;
     }
     v.t += DT;
@@ -270,7 +289,8 @@ ma_device device;
 bool ok = false;
 
 const float kCooldown[NumEvents] = {
-    0.09f, 0.15f, 0.35f, 0.f, 0.f, 0.f, 0.3f, 0.f, 0.f, 0.f, 0.f, 0.16f, 0.f
+    0.09f, 0.15f, 0.35f, 0.f, 0.f, 0.f, 0.3f, 0.f, 0.f, 0.f, 0.f, 0.16f, 0.f,
+    0.f, 0.15f, 0.05f, 0.f
 };
 double lastPlay[NumEvents][3];
 

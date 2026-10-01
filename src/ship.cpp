@@ -188,6 +188,10 @@ Ship::reset(Point2D resetPoint) {
     leftThrust[1].x = 0.02f ; leftThrust[1].y = 0.02f;
 
     spaceShip.offset = resetPoint ;
+    for (int i = 0; i < SHIP; ++i) {
+        spaceShip.location[i].x = spaceShip.vertices[i].x + resetPoint.x;
+        spaceShip.location[i].y = spaceShip.vertices[i].y + resetPoint.y;
+    }
     velocity.x = 0.0 ; velocity.y = 0.0 ;
     
     landed = false ;
@@ -205,6 +209,11 @@ Ship::reset(Point2D resetPoint) {
     explodeBigger.x = 0.0 ;
     explodeBigger.y = 0.0 ;
     score = 0;
+
+    for (int i = 0; i < PELLET_MAX; ++i) pellets[i].active = false;
+    ammo = AMMO_CAPACITY;
+    fireCooldown = 0;
+    ammoRecharge = 0;
     
 }
 
@@ -331,61 +340,70 @@ Ship::ifShipsColide(void) {
     return false;
 }
 
-/* TODO fix bounce off base by rethining points in poloygons */
-
-void
-Ship::bounceOffBase(Point2D* base) {
-    
-    for( int i=0;i<BASE;i++) {
-        if(shipInPolygon(spaceShip , otherShipPad)) {
-            base[i].x = otherShipPad[i].x ;
-            base[i].y = otherShipPad[i].y ;
-        }
-        else {
-            base[i].x = spaceShip.landingPad[i].x;
-            base[i].y = spaceShip.landingPad[i].y;
+// SAT on two convex polygons; mtv pushes a out of b.
+static bool convexMTV(const Point2D* a, int na, const Point2D* b, int nb, Point2D& mtv)
+{
+    float best = INFINITY;
+    Point2D bestN = {0, 0};
+    for (int pass = 0; pass < 2; ++pass) {
+        const Point2D* p = pass ? b : a;
+        int n = pass ? nb : na;
+        for (int i = 0; i < n; ++i) {
+            const Point2D& p0 = p[i];
+            const Point2D& p1 = p[(i + 1) % n];
+            float nx = p1.y - p0.y, ny = p0.x - p1.x;
+            float len = sqrtf(nx * nx + ny * ny);
+            if (len == 0.0f) continue;
+            nx /= len; ny /= len;
+            float amin = INFINITY, amax = -INFINITY, bmin = INFINITY, bmax = -INFINITY;
+            for (int k = 0; k < na; ++k) {
+                float d = a[k].x * nx + a[k].y * ny;
+                amin = fminf(amin, d); amax = fmaxf(amax, d);
+            }
+            for (int k = 0; k < nb; ++k) {
+                float d = b[k].x * nx + b[k].y * ny;
+                bmin = fminf(bmin, d); bmax = fmaxf(bmax, d);
+            }
+            float overlap = fminf(amax, bmax) - fmaxf(amin, bmin);
+            if (overlap <= 0.0f) return false;
+            if (overlap < best) { best = overlap; bestN = {nx, ny}; }
         }
     }
-    
-    //float xMid = (base[3].x - base[0].x)/2.0 ;
-    float yMid = (base[2].y - base[3].y)/2.0 ;
-    
-    bool hitSide = false ;
-    for( int i = 0 ; i < SHIP ; i++ )
-        if( spaceShip.location[i].x > base[0].x &&
-            spaceShip.location[i].x < base[1].x &&
-            spaceShip.location[i].y > base[0].y &&
-            spaceShip.location[i].y < base[1].y )
-        {
-            hitSide = true;
-            spaceShip.offset.x += 0.0002 ;
-            spaceShip.offset.y += 0.0001 ;
-            velocity.x *= -1;
-            break;
-        }
-    for( int i = 0 ; i < SHIP ; i++ )
-        if( spaceShip.location[i].x > base[2].x &&
-            spaceShip.location[i].x < base[3].x &&
-            spaceShip.location[i].y > base[3].y &&
-            spaceShip.location[i].y < base[2].y )
-        {
-            hitSide = true;
-            spaceShip.offset.x -= 0.0002 ;
-            spaceShip.offset.y += 0.0004 ;
-            velocity.x *= -1;
-            break;
-        }
-    
-    bool belowLineY = false;
-    for( int i=0 ; i< SHIP ; i++)
-        if( spaceShip.location[i].y < base[1].y - yMid )
-            belowLineY = true;
-    
-    if( belowLineY )
-        spaceShip.offset.y -= 0.001;
-    else
-        spaceShip.offset.y += 0.001;
-    velocity.y *= -1 ;
+    if (!std::isfinite(best)) return false;
+    Point2D ca = {0, 0}, cb = {0, 0};
+    for (int k = 0; k < na; ++k) { ca.x += a[k].x / na; ca.y += a[k].y / na; }
+    for (int k = 0; k < nb; ++k) { cb.x += b[k].x / nb; cb.y += b[k].y / nb; }
+    if ((ca.x - cb.x) * bestN.x + (ca.y - cb.y) * bestN.y < 0.0f) {
+        bestN.x = -bestN.x; bestN.y = -bestN.y;
+    }
+    mtv = {bestN.x * best, bestN.y * best};
+    return true;
+}
+
+// Returns true on an actual impact (ship moving into the pad).
+bool
+Ship::bounceOffBase(const Point2D* base) {
+    // Vertices 1, 3, 5 lie on or inside the triangle 0-2-4, so it is the convex hull.
+    Point2D hull[3] = { spaceShip.location[0], spaceShip.location[2], spaceShip.location[4] };
+    Point2D mtv;
+    if (!convexMTV(hull, 3, base, BASE, mtv))
+        return false;
+
+    spaceShip.offset.x += mtv.x;
+    spaceShip.offset.y += mtv.y;
+    for (int i = 0; i < SHIP; ++i) {
+        spaceShip.location[i].x += mtv.x;
+        spaceShip.location[i].y += mtv.y;
+    }
+
+    float len = sqrtf(mtv.x * mtv.x + mtv.y * mtv.y);
+    if (len == 0.0f) return false;
+    float nx = mtv.x / len, ny = mtv.y / len;
+    float vn = velocity.x * nx + velocity.y * ny;
+    if (vn >= 0.0f) return false;
+    velocity.x -= 2.0f * vn * nx;
+    velocity.y -= 2.0f * vn * ny;
+    return true;
 }
 
 void
@@ -410,15 +428,22 @@ Ship::inBounds(void) {
         sfx::play(sfx::Boing, spaceShip.offset.x, 1.f, id);
     }
     
-    float extrabit = 0.027 ;
-    for( int i=0;i<SHIP;i++) {
-        if( spaceShip.location[i].y <= GROUND ) {
-            spaceShip.location[i].y  = GROUND-extrabit;
-            velocity.y *= -1.0f;
-            if (fabsf(velocity.y) > 0.0004f)
-                sfx::play(sfx::Thud, spaceShip.offset.x, fminf(1.f, fabsf(velocity.y) / 0.008f), id);
-            return;
+    float minY = spaceShip.location[0].y;
+    for( int i=1;i<SHIP;i++)
+        minY = fminf(minY, spaceShip.location[i].y);
+    if( minY <= GROUND ) {
+        // Resolve penetration on offset; location[] is rebuilt from it in updatePosition().
+        float push = GROUND - minY;
+        spaceShip.offset.y += push;
+        for( int i=0;i<SHIP;i++)
+            spaceShip.location[i].y += push;
+        // Reflect only when moving into the ground, else a spinning ship flip-flops and sinks.
+        if( velocity.y < 0.0f ) {
+            velocity.y = -velocity.y;
+            if (velocity.y > 0.0004f)
+                sfx::play(sfx::Thud, spaceShip.offset.x, fminf(1.f, velocity.y / 0.008f), id);
         }
+        return;
     }
     
     bool wasOnPad = onPad;
@@ -443,21 +468,16 @@ Ship::inBounds(void) {
                     sfx::play(sfx::Chime, spaceShip.offset.x, 1.f, id);
                 return;
           }
-        } else {
+        } else if( velocity.y < 0.0f ) {
             sfx::play(sfx::Thud, spaceShip.offset.x, fminf(1.f, fabsf(velocity.y) / 0.008f), id);
             velocity.y *= -1.0f;
-            //velocity.y -= damp;
         }
     }
     
-    if ( shipInPolygon(spaceShip , otherShipPad) ) {
+    if ( bounceOffBase(otherShipPad) )
         sfx::play(sfx::Clank, spaceShip.offset.x, 1.f, id);
-        bounceOffBase(otherShipPad);
-    }
-    if ( shipInPolygon(spaceShip , spaceShip.landingPad) ) {
+    if ( bounceOffBase(spaceShip.landingPad) )
         sfx::play(sfx::Clank, spaceShip.offset.x, 1.f, id);
-        bounceOffBase(spaceShip.landingPad);
-    }
 }
 
 void
@@ -588,6 +608,135 @@ void Ship::updatePosition(void) {
     
     if( !landed ) {
        velocity.y -= gravity ;
+    }
+}
+
+void
+Ship::fire(void) {
+    if (fireCooldown > 0) return;
+    fireCooldown = FIRE_COOLDOWN;
+    if (ammo <= 0) {
+        sfx::play(sfx::Dry, spaceShip.offset.x, 1.f, id);
+        return;
+    }
+
+    Pellet* p = nullptr;
+    for (int i = 0; i < PELLET_MAX && !p; ++i)
+        if (!pellets[i].active) p = &pellets[i];
+    if (!p) {   // recycle the oldest spent round
+        p = &pellets[0];
+        for (int i = 1; i < PELLET_MAX; ++i)
+            if (pellets[i].resting && (!p->resting || pellets[i].life > p->life)) p = &pellets[i];
+    }
+
+    Point2D tip = spaceShip.vertices[0];
+    float len = sqrtf(tip.x * tip.x + tip.y * tip.y);
+    Point2D dir = {tip.x / len, tip.y / len};
+
+    --ammo;
+    p->active  = true;
+    p->resting = false;
+    p->life    = 0;
+    p->pos = {spaceShip.offset.x + tip.x, spaceShip.offset.y + tip.y};
+    p->vel = {velocity.x + dir.x * MUZZLE_SPEED, velocity.y + dir.y * MUZZLE_SPEED};
+
+    velocity.x -= dir.x * RECOIL;
+    velocity.y -= dir.y * RECOIL;
+    landed = false;
+    sfx::play(sfx::Fire, spaceShip.offset.x, 1.f, id);
+}
+
+void
+Ship::bump(const Pellet& p) {
+    Point2D dv = {p.vel.x - velocity.x, p.vel.y - velocity.y};
+    Point2D r  = {p.pos.x - spaceShip.offset.x, p.pos.y - spaceShip.offset.y};
+    velocity.x += dv.x * PELLET_KICK;
+    velocity.y += dv.y * PELLET_KICK;
+    ang += (r.x * dv.y - r.y * dv.x) * PELLET_SPIN_KICK;
+    landed = false;
+    onPad = false;
+    sfx::play(sfx::Ping, spaceShip.offset.x, 1.f, id);
+}
+
+void
+Ship::updatePellets(Ship& other) {
+    if (fireCooldown > 0) --fireCooldown;
+
+    if (onPad && ammo < AMMO_CAPACITY) {
+        if (++ammoRecharge >= AMMO_RECHARGE) {
+            ammoRecharge = 0;
+            ++ammo;
+            sfx::play(sfx::Reload, spaceShip.offset.x, (float)ammo / AMMO_CAPACITY, id);
+        }
+    } else {
+        ammoRecharge = 0;
+    }
+
+    Ship* scavengers[2] = {this, &other};
+    for (int i = 0; i < PELLET_MAX; ++i) {
+        Pellet& p = pellets[i];
+        if (!p.active) continue;
+        ++p.life;
+
+        if (p.resting) {
+            if (p.life > PELLET_REST_FRAMES) { p.active = false; continue; }
+            // Anyone can scoop up a spent round off the ground, including the enemy's.
+            for (Ship* s : scavengers) {
+                if (s->ammo >= AMMO_CAPACITY) continue;
+                float dx = s->spaceShip.offset.x - p.pos.x, dy = s->spaceShip.offset.y - p.pos.y;
+                if (dx * dx + dy * dy < PICKUP_RADIUS * PICKUP_RADIUS) {
+                    ++s->ammo;
+
+    string rounds = " Ammo:  " + string(ammo, 'o') + string(AMMO_CAPACITY - ammo, '.');
+    drawText(rounds, statTextPosX, statTextPosY-20);
+                    p.active = false;
+                    sfx::play(sfx::Reload, p.pos.x, (float)s->ammo / AMMO_CAPACITY, s->id);
+                    break;
+                }
+            }
+            continue;
+        }
+
+        p.vel.y -= PELLET_GRAVITY;
+        p.pos.x += p.vel.x;
+        p.pos.y += p.vel.y;
+        if (p.pos.x < -1.75f) p.pos.x += 3.5f;
+        if (p.pos.x >  1.75f) p.pos.x -= 3.5f;
+
+        if (p.pos.y <= GROUND + PELLET_RADIUS) {
+            p.pos.y = GROUND + PELLET_RADIUS;
+            p.vel = {0, 0};
+            p.resting = true;
+            p.life = 0;
+            continue;
+        }
+
+        if (pointInPolygon(BASE, spaceShip.landingPad, p.pos.x, p.pos.y) ||
+            pointInPolygon(BASE, other.spaceShip.landingPad, p.pos.x, p.pos.y)) {
+            p.active = false;
+            continue;
+        }
+
+        const Point2D* h = other.spaceShip.location;
+        Point2D hull[3] = {h[0], h[2], h[4]};
+        if (pointInPolygon(3, hull, p.pos.x, p.pos.y)) {
+            other.bump(p);
+            p.active = false;
+        }
+    }
+}
+
+void
+Ship::drawPellets(void) {
+    for (int i = 0; i < PELLET_MAX; ++i) {
+        const Pellet& p = pellets[i];
+        if (!p.active) continue;
+        float k = p.resting ? 0.45f : 1.0f;
+        glColor3f(shipColor[0] * k, shipColor[1] * k, shipColor[2] * k);
+        glPushMatrix();
+        glTranslatef(p.pos.x, p.pos.y, 0);
+        drawCircle(PELLET_RADIUS);
+        glPopMatrix();
     }
 }
 

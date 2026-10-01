@@ -16,6 +16,10 @@ enum Event {
     Alarm,      // low fuel
     Sputter,    // thrust with empty tank
     Start,      // game start power-up
+    Fire,       // pellet launched
+    Dry,        // fire with empty magazine
+    Ping,       // pellet hit a ship
+    Reload,     // round added, param = magazine fraction 0..1
     NumEvents
 };
 
