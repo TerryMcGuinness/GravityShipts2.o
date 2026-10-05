@@ -238,8 +238,8 @@ static bool selectMode(GLFWwindow* window) {
         centered("YELLOW: Q/W ROTATE, X THRUST, Z OR C FIRE", -0.48f, 0.028f, 1, 1, 0, 0.7f);
         centered("CYAN: CPU, OR [ AND ] ROTATE, / THRUST, . OR RIGHT SHIFT FIRE", -0.56f, 0.028f,
                  0, 1, 1, 0.7f);
-        centered("CPU FLIES WITH CLUMSY HUMAN TIMING AND SHARPENS ONLY WHEN BEHIND", -0.64f, 0.028f,
-                 0, 1, 1, 0.5f);
+        centered("CONSERVATION OF MOMENTUM IS NOT OPTIONAL", -0.64f, 0.028f,
+                 1, 0.5f, 0.2f, 0.45f + 0.25f * sinf((float)t * 2.f));
         centered("FIRST TO FIVE WINS", -0.72f, 0.028f, 1, 1, 1, 0.5f);
 
         // Ground and the two home pads, as in the game.

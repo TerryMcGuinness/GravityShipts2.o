@@ -1,4 +1,5 @@
 #include "gameplay.h"
+#include "sound.h"
 
 void resetBall(Ship& ship) {
     Point2D ball;
@@ -96,12 +97,8 @@ bool updateShip(Ship& ship) {
 }
 
 void resolveShipCollision(Ship& ship1, Ship& ship2) {
-    if (ship1.ifShipsColide() || ship2.ifShipsColide()) {
-        ship2.velocity.x *= -1;
-        ship2.velocity.y *= -1;
-        ship2.ang += 0.01;
-        ship1.velocity.x *= -1;
-        ship1.velocity.y *= -1;
-        ship1.ang += 0.01;
-    }
+    // Newtonian impulse (Phase 1, linear): conserves momentum, with restitution
+    // for the elastic/inelastic range. Replaces the old velocity-flip bounce.
+    if (ship1.resolveCollision(ship2))
+        sfx::play(sfx::Clang, ship1.spaceShip.offset.x);
 }

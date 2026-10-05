@@ -1,5 +1,12 @@
 # Copilot instructions for GravityShips2.o
 
+## Changelog (required)
+
+Whenever anything in this project changes — code, build, assets, docs, or these
+instructions — record it in `CHANGELOG.md` as part of the same work. No change
+is complete until it has a changelog entry. Add entries under `## [Unreleased]`
+at the top, grouped as Added / Changed / Fixed / Removed, newest at the top.
+
 ## Build, run, test, and lint
 
 This is a Linux-only C++17/CMake project. It requires OpenGL and GLFW 3 through

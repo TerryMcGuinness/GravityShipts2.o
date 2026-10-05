@@ -16,7 +16,7 @@ Each ship (yellow = Player 1, cyan = Player 2) has:
 - **A landing pad** in its own colour. After you pick up your ball, the pad moves somewhere new. Land on it squarely to score: level attitude, near-zero velocity, both feet on the deck.
 - **Fuel.** Thrust and rotation both burn it. Sitting on your own pad refuels you. When the tank is empty, the engine only coughs.
 
-Each point makes the game harder. Your ball and your pad both get smaller, and from stage 2 on the pad floats off the ground. The ships can hit each other and bounce off each other's pads. The world wraps around horizontally. The ground is hard.
+Each point makes the game harder. Your ball and your pad both get smaller, and from stage 2 on the pad floats off the ground. The ships collide with each other using a Newtonian impulse model — equal masses exchanging momentum, with a restitution coefficient (set by a ship's damage) spanning a clean elastic rebound to an energy-absorbing inelastic one — and they bounce off each other's pads. The world wraps around horizontally. The ground is hard.
 
 The first player to **5 points** wins. The loser goes out as a "red giant": a white flash and twin shockwaves, a spray of sparks, and hull pieces that tumble down to the ground. Then a small seed of fire cools from white to deep red as it slowly grows into a breathing, counter-rotating cloud with flickering corona rays and rising embers.
 

@@ -45,6 +45,10 @@ const float GRAVITY        = 0.00001;
 const float VELOCITY_FACTOR = 0.008;
 const float ANGLE_FACTOR    = 0.0004;
 
+// Ship-on-ship rigid-body collision (Phase 1: linear momentum).
+const float SHIP_MASS        = 1.0f;    // both ships equal mass
+const float SHIP_RESTITUTION = 0.6f;    // e: 1=elastic, 0=inelastic; lowered by damage later
+
 const float GROUND = -1.0;
 const int   WIN_SCORE = 5;
 
@@ -240,6 +244,11 @@ public:
     
     float ang ;
     Point2D velocity ;
+    float mass = SHIP_MASS;            // equal for both ships (Phase 1)
+    float restitution = SHIP_RESTITUTION; // per-ship; damage can lower it later
+    // Resolve a Newtonian impulse against another ship along the SAT normal.
+    // Reads both ships' mass/velocity/hull, writes post-collision velocities.
+    bool resolveCollision(Ship& other);
     void drawShip();
     void setShipColor(GLfloat* color);
     void drawCircle(float r);    

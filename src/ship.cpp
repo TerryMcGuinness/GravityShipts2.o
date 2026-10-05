@@ -424,6 +424,52 @@ static bool convexMTV(const Point2D* a, int na, const Point2D* b, int nb, Point2
     return true;
 }
 
+// Phase 1: Newtonian linear-momentum collision between two ships.
+// Reuses convexMTV for the contact normal, separates the pair by mass, then
+// applies an impulse along the normal so momentum is conserved (and kinetic
+// energy too when e==1). Returns true on a genuine impact. Linear only; spin
+// from off-center hits is Phase 2.
+bool
+Ship::resolveCollision(Ship& other) {
+    // Triangular convex hulls: vertices 0,2,4 (same convention as bounceOffBase).
+    Point2D hullA[3] = { spaceShip.location[0], spaceShip.location[2], spaceShip.location[4] };
+    Point2D hullB[3] = { other.spaceShip.location[0], other.spaceShip.location[2], other.spaceShip.location[4] };
+
+    Point2D mtv;
+    if (!convexMTV(hullA, 3, hullB, 3, mtv))
+        return false;                      // not touching
+
+    float len = sqrtf(mtv.x * mtv.x + mtv.y * mtv.y);
+    if (len == 0.0f) return false;
+    float nx = mtv.x / len, ny = mtv.y / len;   // unit normal, pushes A off B
+
+    // Positional correction: split the separation by mass (equal -> half each).
+    float invA = 1.0f / mass, invB = 1.0f / other.mass;
+    float invSum = invA + invB;
+    float sepA = (invA / invSum), sepB = (invB / invSum);
+    spaceShip.offset.x += mtv.x * sepA;  spaceShip.offset.y += mtv.y * sepA;
+    other.spaceShip.offset.x -= mtv.x * sepB;  other.spaceShip.offset.y -= mtv.y * sepB;
+    for (int i = 0; i < SHIP; ++i) {
+        spaceShip.location[i].x += mtv.x * sepA;  spaceShip.location[i].y += mtv.y * sepA;
+        other.spaceShip.location[i].x -= mtv.x * sepB;  other.spaceShip.location[i].y -= mtv.y * sepB;
+    }
+
+    // Relative velocity along the normal (A relative to B).
+    float rvx = velocity.x - other.velocity.x;
+    float rvy = velocity.y - other.velocity.y;
+    float vn = rvx * nx + rvy * ny;
+    if (vn >= 0.0f) return false;          // already separating: no impulse, no stick
+
+    // Impulse magnitude: j = -(1+e) vn / (1/mA + 1/mB). Use the softer (more
+    // damaged) ship's restitution so damage reads as a deader collision.
+    float e = fminf(restitution, other.restitution);
+    float j = -(1.0f + e) * vn / invSum;
+
+    velocity.x += (j * invA) * nx;  velocity.y += (j * invA) * ny;
+    other.velocity.x -= (j * invB) * nx;  other.velocity.y -= (j * invB) * ny;
+    return true;
+}
+
 // Returns true on an actual impact (ship moving into the pad).
 bool
 Ship::bounceOffBase(const Point2D* base) {
