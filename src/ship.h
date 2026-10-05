@@ -15,11 +15,15 @@
 #include <stdlib.h>
 #include <math.h>
 #include <iostream>
+#include <string>
 #include <unistd.h>
 
 #include "sound.h"
 
 extern GLuint cloudTexture;
+
+// Removes the cloud image's grey background and feathers it to a disc for additive glow.
+void prepareCloudTexture(unsigned char* rgba, int w, int h);
 
 enum {
     STAGE1,
@@ -58,6 +62,44 @@ const float PELLET_SPIN_KICK   = 8.0;
 const float PICKUP_RADIUS      = 0.03;
 const float PELLET_BOUNCE      = 0.6;    // coefficient of restitution
 const int   PELLET_ARM_FRAMES  = 8;      // own ship is immune until the round clears the muzzle
+
+const int   EXPLOSION_SPARKS      = 96;
+const int   EXPLOSION_GROW_FRAMES = 330;    // cloud blooms from a seed to full size
+const float EXPLOSION_CLOUD_SIZE  = 0.19;   // full-grown cloud radius
+const float EXPLOSION_CLOUD_SPIN  = 0.15;   // degrees per frame
+const int   EXPLOSION_RING_FRAMES = 55;     // shockwave lifetime
+
+namespace ai_tuning {
+constexpr int STRATEGY_FRAMES = 20;
+constexpr int COMBAT_FRAMES = 240;
+constexpr int COMBAT_REST_FRAMES = 480;
+constexpr int ADAPT_FRAMES = 180;
+constexpr int STALL_FRAMES = 600;
+constexpr int RECOVERY_FRAMES = 120;
+constexpr float RESERVE_FRACTION = 0.35f;
+constexpr float REFILL_FRACTION = 0.9f;
+constexpr float APPROACH_HEIGHT = 0.14f;
+constexpr float CRUISE_SPEED = 0.0015f;
+constexpr float LEVEL_SPEED = 0.0004f;
+constexpr float DESCENT_SPEED = 0.00045f;
+constexpr float POSITION_GAIN = 0.008f;
+constexpr float HORIZONTAL_GAIN = 0.035f;
+constexpr float VERTICAL_GAIN = 0.06f;
+constexpr float MAX_HORIZONTAL_ACCELERATION = 0.000022f;
+constexpr float MAX_TILT = 0.9f;
+constexpr float MAX_SPIN = 0.035f;
+// Human-like key timing. Interpolated from Easy to Hard, so the CPU only gets
+// finer control as it falls behind; even Hard never pulses for a single frame.
+constexpr int EASY_MIN_BURST_FRAMES = 6;    // shortest thrust burst
+constexpr int HARD_MIN_BURST_FRAMES = 2;
+constexpr int EASY_KEY_GAP_FRAMES = 4;      // shortest pause before pressing again
+constexpr int HARD_KEY_GAP_FRAMES = 1;
+constexpr int EASY_MIN_TURN_FRAMES = 5;     // shortest rotation tap
+constexpr int HARD_MIN_TURN_FRAMES = 2;
+constexpr int EASY_COUNTER_TURN_FRAMES = 9; // pause before a counter-rotation
+constexpr int HARD_COUNTER_TURN_FRAMES = 2;
+constexpr float LEVEL_SLACK = 0.015f;       // radians left uncorrected while settling onto a pad
+}
 
 struct Point2D {
     GLfloat x;
@@ -102,6 +144,17 @@ struct Pellet {
     bool resting;
 };
 
+struct Debris {          // one hull edge flung free, endpoints relative to pos
+    Point2D pos, vel, a, b;
+    float ang, spin;
+};
+
+struct Spark {
+    Point2D pos, vel;
+    int  life, maxLife;
+    bool ember;          // slow rising ember rather than a blast spark
+};
+
 #define BASE_THICKNESS 0.01
 
 
@@ -118,6 +171,8 @@ struct SpaceShip {
 
 float
 randomRange(float min, float max);
+
+void drawText(std::string text, int x, int y);
 
 class Ship {
 
@@ -166,6 +221,9 @@ public:
     void inBounds(void);
     void explode(void);
     GLfloat rotateCloud ;
+    int explodeFrame ;
+    Debris debris[SHIP];
+    Spark sparks[EXPLOSION_SPARKS];
     
     void setBallLocation( Point2D ballLocation, float ballSize);
     void drawBall(void);
@@ -188,7 +246,6 @@ public:
     
     Point2D landingLocation;
     float landingPadSize ;
-    Point2D explodeBigger;
     
     bool landedOnPad ;
     bool onPad ;

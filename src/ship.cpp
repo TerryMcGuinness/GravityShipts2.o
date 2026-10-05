@@ -251,9 +251,7 @@ Ship::reset(Point2D resetPoint) {
     hitOtherBall = false ;
     pointWasInPolygon = false ;
     rotateCloud = 0.0 ;
-    
-    explodeBigger.x = 0.0 ;
-    explodeBigger.y = 0.0 ;
+    explodeFrame = 0 ;
     score = 0;
 
     for (int i = 0; i < PELLET_MAX; ++i) pellets[i].active = false;
@@ -526,78 +524,261 @@ Ship::inBounds(void) {
         sfx::play(sfx::Clank, spaceShip.offset.x, 1.f, id);
 }
 
+namespace {
+
+struct RGB { float r, g, b; };
+
+RGB mix(RGB a, RGB b, float t) {
+    return {a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t};
+}
+
+float clamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+// Radial glow: opaque-ish centre fading to nothing at radius r.
+void glowDisc(float x, float y, float r, RGB c, float a) {
+    glBegin(GL_TRIANGLE_FAN);
+    glColor4f(c.r, c.g, c.b, a);
+    glVertex2f(x, y);
+    glColor4f(c.r, c.g, c.b, 0);
+    for (int i = 0; i <= 24; ++i) {
+        float th = (i % 24) * 2 * PI / 24;
+        glVertex2f(x + r * cosf(th), y + r * sinf(th));
+    }
+    glEnd();
+}
+
+// Soft-edged ring of radius r and half-width w.
+void glowRing(float x, float y, float r, float w, RGB c, float a) {
+    const int N = 72;
+    for (int side = 0; side < 2; ++side) {
+        float r0 = side ? r : fmaxf(0.f, r - w), r1 = side ? r + w : r;
+        float a0 = side ? a : 0.f, a1 = side ? 0.f : a;
+        glBegin(GL_TRIANGLE_STRIP);
+        for (int i = 0; i <= N; ++i) {
+            float th = (i % N) * 2 * PI / N, cs = cosf(th), sn = sinf(th);
+            glColor4f(c.r, c.g, c.b, a0); glVertex2f(x + r0 * cs, y + r0 * sn);
+            glColor4f(c.r, c.g, c.b, a1); glVertex2f(x + r1 * cs, y + r1 * sn);
+        }
+        glEnd();
+    }
+}
+
+void cloudLayer(float x, float y, float r, float angDeg, RGB c, float a) {
+    if (!cloudTexture) { glowDisc(x, y, r * 0.85f, c, a); return; }
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, cloudTexture);
+    glPushMatrix();
+    glTranslatef(x, y, 0);
+    glRotatef(angDeg, 0, 0, 1);
+    glScalef(r, r, 1);
+    glColor4f(c.r, c.g, c.b, a);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f(-1, -1);
+    glTexCoord2f(1, 0); glVertex2f( 1, -1);
+    glTexCoord2f(1, 1); glVertex2f( 1,  1);
+    glTexCoord2f(0, 1); glVertex2f(-1,  1);
+    glEnd();
+    glPopMatrix();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
+}
+
+void launchSpark(Spark& s, Point2D c) {
+    float th = randomRange(0, 2 * PI), sp = randomRange(0.002, 0.016);
+    s.pos = c;
+    s.vel = {cosf(th) * sp, sinf(th) * sp};
+    s.maxLife = s.life = 40 + rand() % 70;
+    s.ember = false;
+}
+
+void launchEmber(Spark& s, Point2D c, float r) {
+    float th = randomRange(0, 2 * PI), d = r * 0.55f * sqrtf(randomRange(0, 1));
+    s.pos = {c.x + cosf(th) * d, c.y + sinf(th) * d};
+    s.vel = {randomRange(-0.0003, 0.0003), randomRange(0.0005, 0.0013)};
+    s.maxLife = s.life = 120 + rand() % 140;
+    s.ember = true;
+}
+
+} // namespace
+
+void prepareCloudTexture(unsigned char* rgba, int w, int h) {
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            unsigned char* p = rgba + 4 * (y * w + x);
+            for (int k = 0; k < 3; ++k)
+                p[k] = (unsigned char)fmaxf(0.f, (p[k] - 16) * 255.f / 239.f);
+            float dx = (x + 0.5f) / w - 0.5f, dy = (y + 0.5f) / h - 0.5f;
+            float edge = clamp01((0.5f - sqrtf(dx * dx + dy * dy)) / 0.14f);
+            p[3] = (unsigned char)(p[3] * edge * edge * (3 - 2 * edge));
+        }
+    }
+}
+
+// "Red giant": a white flash and twin shockwaves, then a seed of fire that
+// cools from white to deep red while it blooms into a slowly counter-rotating,
+// breathing nebula. Hull edges tumble away and settle as wreckage, sparks
+// spray out, and embers keep drifting up from the cloud for good.
 void
 Ship::explode(void) {
-    
+
     gravity = 0.0;
     velocity.x = 0.0 ;
     velocity.y = 0.0 ;
-    
-            glColor3f(1.0, 0.0, 0.0);
-            glBindTexture(GL_TEXTURE_2D, cloudTexture);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glEnable(GL_TEXTURE_2D);
-            glPushMatrix();
-            glTranslated(spaceShip.offset.x-explodeBigger.x*2.0, spaceShip.offset.y-explodeBigger.y*2.0,0.0);
-            glScalef(explodeBigger.x*4,explodeBigger.y*4,explodeBigger.x*4);
-    
-    rotateCloud += 0.5 ;
-    glMatrixMode(GL_TEXTURE);
-    glLoadIdentity();
-    glTranslatef(0.5,0.5,0.0);
-    glRotatef(rotateCloud,0.0,0.0,1.0);
-    glTranslatef(-0.5,-0.5,0.0);
-    glMatrixMode(GL_MODELVIEW);
-    
-            glBegin( GL_QUADS );
-            glTexCoord2d(0.0,0.0); glVertex2d(0.0,0.0);
-            glTexCoord2d(1.0,0.0); glVertex2d(1.0,0.0);
-            glTexCoord2d(1.0,1.0); glVertex2d(1.0,1.0);
-            glTexCoord2d(0.0,1.0); glVertex2d(0.0,1.0);
-            glEnd();
-            glPopMatrix();
-            glFlush();
-            glBindTexture(GL_TEXTURE_2D, 0);
-            glDisable(GL_TEXTURE_2D);
-    
-    float randomAng ;
-    glLineWidth(.5);
-    
 
-    glColor3f(shipColor[0],shipColor[1],shipColor[2]);
-   
-    for(int i=0;i<SHIP;i++) {
-        
-        for(int j=0;j<4;j++) {
-            randomAng = randomRange(-0.1, 0.1);
-            spaceShip.vertices[i] = rotatePoints(spaceShip.vertices[i], randomAng);
+    const Point2D c = spaceShip.offset;
+
+    if (explodeFrame == 0) {
+        rotateCloud = randomRange(0, 360);
+        for (int i = 0; i < SHIP; ++i) {
+            Point2D a = spaceShip.vertices[i], b = spaceShip.vertices[(i + 1) % SHIP];
+            Point2D m = {(a.x + b.x) / 2, (a.y + b.y) / 2};
+            Debris& d = debris[i];
+            d.a = {a.x - m.x, a.y - m.y};
+            d.b = {b.x - m.x, b.y - m.y};
+            d.pos = {c.x + m.x, c.y + m.y};
+            float len = hypotf(m.x, m.y) + 1e-4f, sp = randomRange(0.002, 0.006);
+            d.vel = {m.x / len * sp + randomRange(-0.001, 0.001),
+                     m.y / len * sp + randomRange(0.0005, 0.002)};
+            d.ang = 0;
+            d.spin = randomRange(-6, 6);
         }
-       
-        glColor3f(shipColor[0], shipColor[1], shipColor[2]);
-        glPushMatrix();
-        if (explodeBigger.x < 0.03)
-            explodeBigger.x += 0.00005 ;
-        explodeBigger.y = explodeBigger.x;
-        int pick=rand()%4+1;
-        if (pick==1) glTranslatef(spaceShip.offset.x+explodeBigger.x,spaceShip.offset.y+explodeBigger.y,0);
-        if (pick==2) glTranslatef(spaceShip.offset.x-explodeBigger.x,spaceShip.offset.y-explodeBigger.y,0);
-        if (pick==3) glTranslatef(spaceShip.offset.x+explodeBigger.x,spaceShip.offset.y-explodeBigger.y,0);
-        if (pick==4) glTranslatef(spaceShip.offset.x-explodeBigger.x,spaceShip.offset.y+explodeBigger.y,0);
-        //glBegin(GL_LINE_STRIP);
-        // glVertex2d(spaceShip.vertices[i].x, spaceShip.vertices[i].y);
-        // glVertex2d(spaceShip.vertices[i+1].x, spaceShip.vertices[i+1].y);
-        //glEnd();
-        glPopMatrix();
-        
-        //glPushMatrix();
-        //glTranslatef(spaceShip.offset.x-explodeBigger.x,spaceShip.offset.y+explodeBigger.y,0);
-        //glBegin(GL_LINE_STRIP);
-        // glVertex2d(spaceShip.vertices[i].x, spaceShip.vertices[i].y);
-        // glVertex2d(spaceShip.vertices[i+1].x, spaceShip.vertices[i+1].y);
-        //glEnd();
-        //glPopMatrix();
+        for (int i = 0; i < EXPLOSION_SPARKS; ++i) launchSpark(sparks[i], c);
     }
+
+    const float t = explodeFrame;
+    if (explodeFrame < 1000000) ++explodeFrame;
+    rotateCloud += EXPLOSION_CLOUD_SPIN;
+
+    const float u = clamp01(t / EXPLOSION_GROW_FRAMES);
+    const float grow = u * u * (3 - 2 * u);
+    const float r = EXPLOSION_CLOUD_SIZE * (0.05f + 0.95f * grow);
+    const float heat = expf(-t / 80.f);
+
+    const RGB white   = {1.00f, 1.00f, 0.95f};
+    const RGB hot     = {1.00f, 0.90f, 0.65f};
+    const RGB orange  = {1.00f, 0.42f, 0.10f};
+    const RGB red     = {0.95f, 0.10f, 0.04f};
+    const RGB crimson = {0.55f, 0.02f, 0.06f};
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);   // additive: everything glows
+
+    // Corona rays behind the cloud, turning against it and flickering.
+    {
+        const int RAYS = 20;
+        RGB rc = mix(red, hot, heat);
+        glBegin(GL_TRIANGLES);
+        for (int i = 0; i < RAYS; ++i) {
+            float th = (-rotateCloud * 0.6f + i * 360.f / RAYS) * PI / 180;
+            float flick = 0.55f + 0.45f * sinf(t * 0.045f * (1 + (i % 4) * 0.35f) + i * 2.39f);
+            float len = r * (1.05f + 0.6f * flick), hw = 0.045f;
+            glColor4f(rc.r, rc.g, rc.b, 0.22f * grow * flick);
+            glVertex2f(c.x, c.y);
+            glColor4f(rc.r, rc.g, rc.b, 0);
+            glVertex2f(c.x + len * cosf(th - hw), c.y + len * sinf(th - hw));
+            glVertex2f(c.x + len * cosf(th + hw), c.y + len * sinf(th + hw));
+        }
+        glEnd();
+    }
+
+    // Three cloud layers: different sizes, spin rates and directions, each breathing.
+    cloudLayer(c.x, c.y, r * 1.25f * (1 + 0.035f * sinf(t * 0.021f + 2.0f)),
+               rotateCloud * 0.55f + 140, mix(crimson, hot, heat), 0.55f);
+    cloudLayer(c.x, c.y, r * (1 + 0.035f * sinf(t * 0.03f)),
+               rotateCloud, mix(red, hot, heat), 0.80f);
+    cloudLayer(c.x, c.y, r * 0.62f * (1 + 0.05f * sinf(t * 0.043f + 1.0f)),
+               -rotateCloud * 1.6f + 60, mix(orange, white, heat), 0.50f);
+    glowDisc(c.x, c.y, r * 0.5f, mix(orange, white, heat), 0.30f + 0.12f * sinf(t * 0.05f));
+
+    // Twin shockwaves, cooling from blue-white to orange as they expand.
+    for (int k = 0; k < 2; ++k) {
+        float age = t - k * 10;
+        if (age < 0 || age >= EXPLOSION_RING_FRAMES) continue;
+        float p = age / EXPLOSION_RING_FRAMES, q = 1 - p;
+        glowRing(c.x, c.y, 0.55f * (1 - q * q * q), 0.03f * q + 0.004f,
+                 mix(orange, RGB{0.8f, 0.9f, 1.0f}, q), q * q * (k ? 0.6f : 1.f));
+    }
+
+    // Initial white-hot flash.
+    if (t < 14) {
+        float p = t / 14;
+        glowDisc(c.x, c.y, 0.03f + 0.15f * p, white, (1 - p) * (1 - p));
+    }
+
+    // Hull edges tumble out, fall, bounce and settle as glowing wreckage.
+    for (int i = 0; i < SHIP; ++i) {
+        Debris& d = debris[i];
+        d.pos.x += d.vel.x; d.pos.y += d.vel.y;
+        d.vel.x *= 0.99f; d.vel.y *= 0.99f;
+        d.vel.y -= GRAVITY * 6;
+        d.ang += d.spin;
+        float ca = cosf(d.ang * PI / 180), sa = sinf(d.ang * PI / 180);
+        Point2D a = {d.a.x * ca - d.a.y * sa, d.a.x * sa + d.a.y * ca};
+        Point2D b = {d.b.x * ca - d.b.y * sa, d.b.x * sa + d.b.y * ca};
+        float low = d.pos.y + fminf(a.y, b.y);
+        if (low < GROUND) {
+            d.pos.y += GROUND - low;
+            if (d.vel.y < 0) d.vel.y = -d.vel.y * 0.3f;
+            d.vel.x *= 0.7f;
+            d.spin *= 0.6f;
+        }
+        RGB hull = {shipColor[0], shipColor[1], shipColor[2]};
+        RGB col = mix(white, hull, clamp01(t / 25));
+        float glow = 0.5f + 0.5f * expf(-t / 300.f);
+        for (int pass = 0; pass < 2; ++pass) {
+            glLineWidth(pass ? 1.5f : 5.f);
+            glColor4f(col.r * glow, col.g * glow, col.b * glow, pass ? 1.f : 0.25f);
+            glBegin(GL_LINES);
+            glVertex2f(d.pos.x + a.x, d.pos.y + a.y);
+            glVertex2f(d.pos.x + b.x, d.pos.y + b.y);
+            glEnd();
+        }
+    }
+
+    // Embers keep rising out of the cloud once the blast has settled.
+    if (t > 45 && explodeFrame % 2 == 0) {
+        for (int i = 0; i < EXPLOSION_SPARKS; ++i) {
+            if (sparks[i].life <= 0) { launchEmber(sparks[i], c, r); break; }
+        }
+    }
+
+    glLineWidth(1.5f);
+    for (int i = 0; i < EXPLOSION_SPARKS; ++i) {
+        Spark& s = sparks[i];
+        if (s.life <= 0) continue;
+        float f = (float)s.life / s.maxLife;
+        --s.life;
+        if (s.ember) {
+            s.vel.x += sinf(t * 0.05f + s.pos.y * 40) * 0.00002f;
+            s.pos.x += s.vel.x; s.pos.y += s.vel.y;
+            RGB ec = mix(crimson, orange, 0.5f + 0.5f * sinf(t * 0.3f + i));
+            float a = sinf(PI * f) * 0.9f;
+            glowDisc(s.pos.x, s.pos.y, 0.008f, ec, a);
+            glowDisc(s.pos.x, s.pos.y, 0.0025f, hot, a);
+            continue;
+        }
+        s.pos.x += s.vel.x; s.pos.y += s.vel.y;
+        s.vel.x *= 0.965f; s.vel.y *= 0.965f;
+        s.vel.y -= 0.00004f;
+        if (s.pos.y < GROUND) {
+            s.pos.y = GROUND;
+            s.vel.y = -s.vel.y * 0.4f;
+            s.vel.x *= 0.7f;
+        }
+        RGB sc = f > 0.5f ? mix(orange, hot, (f - 0.5f) * 2) : mix(red, orange, f * 2);
+        glBegin(GL_LINES);
+        glColor4f(sc.r, sc.g, sc.b, fminf(1.f, f * 1.5f));
+        glVertex2f(s.pos.x, s.pos.y);
+        glColor4f(sc.r, sc.g, sc.b, 0);
+        glVertex2f(s.pos.x - s.vel.x * 4, s.pos.y - s.vel.y * 4);
+        glEnd();
+    }
+
+    glLineWidth(1.f);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_BLEND);
+    glColor4f(1, 1, 1, 1);
 }
 
 void

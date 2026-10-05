@@ -33,6 +33,7 @@ std::atomic<unsigned> qHead{0}, qTail{0};
 
 struct EngineCtl { std::atomic<bool> thrust{false}; std::atomic<int> rot{0}; std::atomic<float> x{0.f}; };
 EngineCtl ctl[2];
+std::atomic<float> shipGain[2]{{1.f}, {1.f}};
 
 // ---- audio-thread state ----
 uint32_t rng = 0x9E3779B9u;
@@ -42,7 +43,7 @@ inline float sq(float ph) { return tanhf(4.f * sinf(TAU * ph)); }   // soft squa
 
 struct Voice {
     bool active = false;
-    Event e; float t, dur, pan, p; int ship;
+    Event e; float t, dur, pan, p, gain; int ship;
     float ph[4], lp[3], crackle;
 };
 constexpr int NV = 32;
@@ -68,7 +69,9 @@ void spawn(const Msg& m) {
     }
     *v = Voice{};
     v->active = true; v->e = m.e; v->t = 0; v->dur = kDur[m.e];
-    v->pan = fmaxf(-1.f, fminf(1.f, m.x / 1.75f)); v->p = m.p; v->ship = m.ship;
+    v->pan = fmaxf(-1.f, fminf(1.f, m.x / 1.75f)); v->p = m.p;
+    v->ship = m.ship < 0 ? 0 : m.ship;
+    v->gain = m.ship < 0 ? 1.f : shipGain[m.ship].load(std::memory_order_relaxed);
     v->ph[0] = v->ph[1] = v->ph[2] = v->ph[3] = 0; v->lp[0] = v->lp[1] = v->lp[2] = 0; v->crackle = 0;
 }
 
@@ -265,18 +268,20 @@ void callback(ma_device*, void* out, const void*, ma_uint32 frames) {
     while (tl != h) { spawn(q[tl % QN]); ++tl; }
     qTail.store(tl, std::memory_order_release);
 
+    const float engGain[2] = {shipGain[0].load(std::memory_order_relaxed),
+                              shipGain[1].load(std::memory_order_relaxed)};
     float* o = static_cast<float*>(out);
     for (ma_uint32 n = 0; n < frames; ++n) {
         float L = 0, R = 0;
         for (auto& v : voices) {
             if (!v.active) continue;
-            float s = render(v);
+            float s = render(v) * v.gain;
             float a = (v.pan + 1.f) * 0.25f * TAU * 0.5f;   // equal-power pan
             L += s * cosf(a); R += s * sinf(a);
         }
         for (int i = 0; i < 2; ++i) {
             float pan;
-            float s = renderEngine(i, pan);
+            float s = renderEngine(i, pan) * engGain[i];
             float a = (pan + 1.f) * 0.25f * TAU * 0.5f;
             L += s * cosf(a); R += s * sinf(a);
         }
@@ -334,7 +339,7 @@ void play(Event e, float x, float param, int ship) {
 
     unsigned h = qHead.load(std::memory_order_relaxed);
     if (h - qTail.load(std::memory_order_acquire) >= QN) return;   // full: drop
-    q[h % QN] = Msg{e, x, param, ship < 0 ? 0 : ship};
+    q[h % QN] = Msg{e, x, param, ship};
     qHead.store(h + 1, std::memory_order_release);
 }
 
@@ -342,6 +347,11 @@ void engine(int ship, bool thrust, int rot, float x) {
     ctl[ship].thrust.store(thrust, std::memory_order_relaxed);
     ctl[ship].rot.store(rot, std::memory_order_relaxed);
     ctl[ship].x.store(x, std::memory_order_relaxed);
+}
+
+void setShipVolume(int ship, float gain) {
+    if (ship < 0 || ship > 1) return;
+    shipGain[ship].store(gain, std::memory_order_relaxed);
 }
 
 }

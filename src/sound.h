@@ -32,4 +32,7 @@ void play(Event e, float x = 0.f, float param = 1.f, int ship = -1);
 // Continuous per-ship engine state, call once per frame. rot: -1 CCW, 0 none, +1 CW.
 void engine(int ship, bool thrust, int rot, float x);
 
+// Linear gain for one ship's engine and ship-tagged events; shared (-1) events are unaffected.
+void setShipVolume(int ship, float gain);
+
 }

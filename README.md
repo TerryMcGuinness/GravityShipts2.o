@@ -1,6 +1,6 @@
 # GravityShips2.o
 
-A two-player, same-keyboard lunar-lander duel. Two ships, one gravity well, one tank of fuel each. You grab your ball, land on your pad, and score. First to five wins, and the loser's ship blows up.
+A lunar-lander duel for one player against an offline computer opponent, or two players on the same keyboard. Two ships, one gravity well, one tank of fuel each. You grab your ball, land on your pad, and score. First to five wins, and the loser's ship blows up.
 
 This is a native Linux (Wayland/X11) rewrite of **GravityShips**, a game Terry McGuinness wrote in Xcode on macOS in 2015.
 
@@ -18,9 +18,17 @@ Each ship (yellow = Player 1, cyan = Player 2) has:
 
 Each point makes the game harder. Your ball and your pad both get smaller, and from stage 2 on the pad floats off the ground. The ships can hit each other and bounce off each other's pads. The world wraps around horizontally. The ground is hard.
 
-The first player to **5 points** wins.
+The first player to **5 points** wins. The loser goes out as a "red giant": a white flash and twin shockwaves, a spray of sparks, and hull pieces that tumble down to the ground. Then a small seed of fire cools from white to deep red as it slowly grows into a breathing, counter-rotating cloud with flickering corona rays and rising embers.
 
 ### Controls
+
+At startup, use **Up/Down** to choose **Single-player** (the default) or
+**Two-player**, then **Enter** to start. No gameplay advances in the menu.
+The start screen is drawn in a glowing vector-arcade stroke font: the title
+letters drop in under gravity and thud as they bounce into place, the two
+ships orbit the title, and a hovering ship marks your choice.
+In single-player you fly yellow, and the computer flies cyan; Player 2's
+keyboard controls are ignored.
 
 | | Player 1 (yellow) | Player 2 (cyan) |
 |---|---|---|
@@ -29,7 +37,33 @@ The first player to **5 points** wins.
 | Thrust | `X` | `/` |
 | Fire | `Z` or `C` | `.` or `Right Shift` |
 
-`Esc` quits.
+`Esc` quits from the menu or the match. Restart the application for another match.
+
+### Computer opponent
+
+The CPU starts **Easy**. If it falls one point behind, it gradually moves toward
+**Normal**; two or more points behind moves it toward **Hard**. It eases back
+as it catches up, returning toward Easy at a tie or ahead. A full Easy-to-Hard
+transition takes 180 physics frames (three seconds). The cyan HUD shows the
+effective level; `+` or `-` indicates an upward or downward transition.
+
+The CPU flies with human-like key timing. It cannot feather the controls with
+single-frame pulses: on Easy every thrust burst lasts at least 6 frames (0.1 s),
+every rotation tap at least 5, and it pauses 9 frames before counter-rotating.
+Those limits only tighten as it falls behind, down to 2-frame bursts and taps
+on Hard, and it keeps its hands off the keys in the last instant before
+touchdown. Tuning lives in `ai_tuning` in `src/ship.h`.
+
+The CPU collects its ball, brakes for pickup, approaches its pad from above,
+lands, and returns for fuel and ammunition. It can also attack, evade incoming
+ships/pellets, or block an opponent's delivery approach. Combat commitments are
+limited so it returns to scoring. Harder levels increase safe cruise speed,
+combat opportunities, and firing frequency/precision; landing safety stays the
+same. There are no extra resources, teleports, or special physics advantages.
+
+This version is entirely **offline**: no API key, network connection, or API
+charges. Goal selection is separate from the per-frame flight controller to
+allow an optional Jev strategy integration later; Jev is not implemented here.
 
 ### Pellet gun
 
@@ -40,7 +74,7 @@ Each ship fires small pellets from its nose. They leave at muzzle speed plus the
 
 ### Sound
 
-All the sound is synthesised in real time. There are no sample files. Each sound is panned left or right to follow its ship, and each ship has its own pitch.
+All the sound is synthesised in real time. There are no sample files. Each sound is panned left or right to follow its ship, and each ship has its own pitch. In single-player, the computer's engine and ship sounds play at half volume so your own ship stands out. Shared sounds (game start, victory, explosion) stay at full volume.
 
 | Event | Sound |
 |---|---|
@@ -89,6 +123,36 @@ cmake --build build -j
 
 The build defaults to `Release`. The binary finds `assets/` relative to its own path via `/proc/self/exe`, so you can launch it from any directory. It opens fullscreen on the primary monitor at the monitor's native mode.
 
+### Tests
+
+CMake enables lightweight CTest executables by default (`-DBUILD_TESTING=OFF`
+builds just the game and its shared core).
+
+```sh
+cmake -S . -B build
+cmake --build build -j
+ctest --test-dir build -L unit --output-on-failure
+ctest --test-dir build -L graphics --output-on-failure
+```
+
+Unit tests exercise strategy and controller calculations without a window.
+Graphics scenarios need a working GLFW/OpenGL display: they use a hidden
+window and the actual ship controls, physics, collisions, resources, and
+scoring. A missing display is an explicit test failure. On an X11 CI machine
+with Xvfb installed, use
+`xvfb-run -a ctest --test-dir build -L graphics --output-on-failure`.
+Xvfb is optional test infrastructure, not a game dependency.
+
+The scenario runner checks 20 fixed seeds per score stage and difficulty,
+requiring at least 18 deliveries per group within 18,000 frames each. It also
+checks complete matches, wrapped travel, raised/narrow pads, spin recovery,
+target changes, fuel/reload behavior, combat, and terminal controls. Timing
+samples exclude rendering and require p99 AI work below 1 ms on the machine
+running the test. To see scenario summaries and timing, run
+`./build/ai_scenarios`; `./build/ai_scenarios 2` is a smaller development sweep.
+Automated scenarios do not replace checking fullscreen controls, HUD, sound,
+and both modes interactively.
+
 ---
 
 ## Project layout
@@ -96,9 +160,13 @@ The build defaults to `Release`. The binary finds `assets/` relative to its own 
 ```
 CMakeLists.txt
 assets/cloud.jpg        explosion texture (actually a 100x100 RGBA PNG)
-src/main.cpp            window, input, game loop, scoring, 60 Hz pacing
+src/main.cpp            window, startup menu, input, game loop, 60 Hz pacing
+src/gameplay.{h,cpp}    shared initialization, stage progression, scoring
+src/ai.{h,cpp}          offline strategy, adaptive difficulty, flight controller
 src/ship.{h,cpp}        ship physics, collisions, landing, drawing, HUD text
 src/sound.{h,cpp}       procedural audio synth (miniaudio device, lock-free event queue)
+src/vectorfont.{h,cpp}  glowing stroke font for the start screen
+tests/                  controller unit tests and actual-physics scenarios
 third_party/            stb_image.h, stb_easy_font.h, miniaudio.h (single-header, vendored)
 ```
 
@@ -106,6 +174,11 @@ third_party/            stb_image.h, stb_easy_font.h, miniaudio.h (single-header
 
 - **Rendering:** fixed-function OpenGL 1.x in immediate mode, exactly as in the original, running in a GLFW compatibility-profile context. Mesa and GLVND supply `libGL`.
 - **Timing:** the physics is integrated once per frame with fixed constants. That was tuned against a 60 Hz display in 2015, so the loop is capped at 60 Hz with a sleep-to-deadline limiter, plus resync if it falls more than 100 ms behind. On a 144 Hz panel the game plays at its original speed.
+- **AI:** copied observations are captured before player input. Strategy is
+  reconsidered every 20 frames, or immediately when invalidated or threatened;
+  flight control runs every frame on the game thread. Heading comes from the
+  rotated nose geometry, while `Ship::ang` is angular velocity. AI tuning lives
+  in `ai_tuning` in `src/ship.h`; no worker accesses live ships or audio.
 - **Audio:**
   - Everything runs on the miniaudio callback thread at 48 kHz, f32 stereo.
   - The game thread posts events through a single-producer/single-consumer ring buffer. Continuous engine state (thrust and rotation per ship) is published through relaxed atomics, and the synth smooths it into envelopes.
