@@ -12,6 +12,25 @@ as part of the same work (see .github/copilot-instructions.md).
 ## [Unreleased]
 
 ### Added
+- src/geometry.h: Point2D extracted from ship.h into its own header so the
+  physics base can depend on it without pulling in Ship.
+- src/physics.h: PhysicsBody base class -- the Newtonian core beneath the
+  collision code. Carries pos, velocity, mass, restitution; provides
+  integrate(), invMass(), resolveImpulse(other, n) (the shared impulse law
+  lifted from Ship::resolveCollision: separating-pair early-out, pair-min
+  restitution, momentum-conserving impulse) and bounceOffStatic(n, e) for
+  infinite-mass ground/pads. Ships, balls, pellets will all become
+  PhysicsBodies.
+- tests/physics_tests.cpp (physics_unit): 6 cases -- elastic e=1 conserves
+  momentum AND kinetic energy; inelastic e=0 conserves momentum, loses energy;
+  light ball vs heavy ship conserves momentum with the ship barely moving;
+  separating pair gets no impulse; dull ground (e=0.2) vs lively pad (e=0.9)
+  static bounce. All 4 CTest suites pass 100%.
+- TODO in physics.h (LATER, display-only teaching/debug-draw mode): every
+  PhysicsBody can render its velocity vector and contact normal in the GL view
+  as a physics-learning aid; for ships, the moving tangent/normal frame plus a
+  clothoid (Euler-spiral) retro-thrust demo showing curvature grow linearly.
+  Fenced off from the current physics-base initiative.
 - CHANGELOG.md and a standing rule that all changes must be logged here.
 - Per-ship physical state: mass and per-ship restitution (SHIP_MASS,
   SHIP_RESTITUTION in ship.h).
