@@ -32,6 +32,7 @@ public:
     Point2D velocity {0.0f, 0.0f};
     float   mass        = 1.0f;   // kg (game units); drives momentum transfer
     float   restitution = BODY_RESTITUTION_DEFAULT; // e: 1=elastic, 0=dead
+    float   drag        = 1.0f;   // 1.0 = no damping; <1 bleeds speed each frame
 
     // --- Constructors -------------------------------------------------------
     PhysicsBody() = default;
@@ -45,6 +46,8 @@ public:
 
     // Integrate one frame: apply gravity (if any) then move.
     void integrate(float gravity) {
+        velocity.x *= drag;            // per-body linear damping (1.0 = none)
+        velocity.y *= drag;
         velocity.y -= gravity;
         pos.x += velocity.x;
         pos.y += velocity.y;

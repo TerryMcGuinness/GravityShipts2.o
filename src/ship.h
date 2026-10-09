@@ -59,6 +59,7 @@ const int   AMMO_RECHARGE      = 45;     // frames per round while sitting on ow
 const int   PELLET_REST_FRAMES = 900;    // spent rounds lie on the ground this long
 const float PELLET_RADIUS      = 0.004;
 const float PELLET_GRAVITY     = 0.0001;
+const float PELLET_REST_SPEED  = 0.0018;  // below this upward speed after a bounce, the pellet settles
 const float MUZZLE_SPEED       = 0.010;
 const float RECOIL             = 0.0006;
 const float PELLET_KICK        = 0.25;   // fraction of pellet momentum given to the target
@@ -106,6 +107,7 @@ constexpr float LEVEL_SLACK = 0.015f;       // radians left uncorrected while se
 }
 
 #include "geometry.h"
+#include "physics.h"
 struct ShipStatusConsts {
     int statTextPosX;
     int statTextPosY;
@@ -119,23 +121,26 @@ struct ShipBall {
     bool ballhitonce ;
 };
 
-struct Pellet {
-    Point2D pos;
-    Point2D vel;
-    int  life;
-    bool active;
-    bool resting;
+struct Pellet : PhysicsBody {
+    // pos + velocity + mass + restitution + drag come from PhysicsBody.
+    int  life    = 0;
+    bool active  = false;
+    bool resting = false;
+    Pellet() { mass = 0.15f; restitution = PELLET_BOUNCE; drag = 1.0f; }  // light vs ship's 1.0 -> modest bodoink
 };
 
-struct Debris {          // one hull edge flung free, endpoints relative to pos
-    Point2D pos, vel, a, b;
-    float ang, spin;
+struct Debris : PhysicsBody {   // one hull edge flung free, endpoints relative to pos
+    // pos + velocity from PhysicsBody.
+    Point2D a, b;
+    float ang = 0, spin = 0;
+    Debris() { mass = 1.0f; restitution = 0.3f; drag = 0.99f; }
 };
 
-struct Spark {
-    Point2D pos, vel;
-    int  life, maxLife;
-    bool ember;          // slow rising ember rather than a blast spark
+struct Spark : PhysicsBody {
+    // pos + velocity from PhysicsBody.
+    int  life = 0, maxLife = 0;
+    bool ember = false;  // slow rising ember rather than a blast spark
+    Spark() { mass = 1.0f; restitution = 0.4f; drag = 0.965f; }
 };
 
 #define BASE_THICKNESS 0.01
