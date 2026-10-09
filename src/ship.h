@@ -105,28 +105,7 @@ constexpr int HARD_COUNTER_TURN_FRAMES = 2;
 constexpr float LEVEL_SLACK = 0.015f;       // radians left uncorrected while settling onto a pad
 }
 
-struct Point2D {
-    GLfloat x;
-    GLfloat y;
-    
-    Point2D operator +(const Point2D &a)
-    {
-        return{a.x+x,a.y+y};
-    }
-    
-    Point2D operator *(const Point2D &a)
-    {
-        return{a.x*x,a.y*y};
-    }
-    Point2D& operator =(const Point2D &a)
-    {
-        x = a.x ;
-        y = a.y ;
-        return *this;
-    }
-
-};
-
+#include "geometry.h"
 struct ShipStatusConsts {
     int statTextPosX;
     int statTextPosY;
