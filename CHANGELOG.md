@@ -12,6 +12,21 @@ as part of the same work (see .github/copilot-instructions.md).
 ## [Unreleased]
 
 ### Added
+- Pellet, Debris and Spark now derive from PhysicsBody: pos/velocity/mass/
+  restitution/drag come from the base. Their four hand-rolled integrate-and-
+  bounce loops are collapsed onto PhysicsBody::integrate() (gravity + per-body
+  linear drag) and bounceOffStatic() (reflect with restitution). Per-body feel
+  preserved: debris drag 0.99 / e 0.3, sparks 0.965 / 0.4, pellets 1.0 / 0.6.
+- PhysicsBody gains a `drag` field applied in integrate() (1.0 = none).
+- Pellets now BOUNCE off the ground instead of dead-stopping: ~3 bounces from a
+  top-of-screen drop, ~2 from mid-screen (e=0.6), settling to resting below
+  PELLET_REST_SPEED. Replaces the old velocity=0/resting-on-contact early-out.
+- Ship::bump() is now mass-driven: a pellet's shove on a ship scales with the
+  pellet/ship mass ratio and pair restitution instead of the hand-tuned
+  PELLET_KICK. Changing Pellet mass now changes the bodoink automatically.
+  Pellet mass tuned to 0.15 (vs ship 1.0) for a modest, playable knock.
+  TODO left in bump() to later fold the ship shove + pellet ricochet into a
+  single resolveImpulse() call.
 - src/geometry.h: Point2D extracted from ship.h into its own header so the
   physics base can depend on it without pulling in Ship.
 - src/physics.h: PhysicsBody base class -- the Newtonian core beneath the

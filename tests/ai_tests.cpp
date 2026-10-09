@@ -83,7 +83,9 @@ int main() {
     block.update(o);
     check(block.decision().goal == ai::Goal::Block, "blocks delivery");
     o = observation();
-    o.opponent.pellets[0] = {{0.1f, 0.002f}, {-0.01f, 0}, 10, true, false};
+    { Pellet pel; pel.pos = {0.1f, 0.002f}; pel.velocity = {-0.01f, 0};
+      pel.life = 10; pel.active = true; pel.resting = false;
+      o.opponent.pellets[0] = pel; }
     ai::Controller evade;
     evade.update(o);
     check(evade.decision().goal == ai::Goal::Evade, "evades predicted projectile");

@@ -55,9 +55,9 @@ bool threatened(const Observation& o) {
             if (!p.active || p.resting) continue;
             for (int frames = 4; frames <= 32; frames += 4) {
                 if (owner == &o.self && p.life + frames < PELLET_ARM_FRAMES) continue;
-                float x = wrappedDelta(p.pos.x + frames * p.vel.x -
+                float x = wrappedDelta(p.pos.x + frames * p.velocity.x -
                                        o.self.position.x - frames * o.self.velocity.x);
-                float y = p.pos.y + frames * p.vel.y -
+                float y = p.pos.y + frames * p.velocity.y -
                           PELLET_GRAVITY * frames * (frames + 1) * 0.5f -
                           o.self.position.y - frames * o.self.velocity.y;
                 if (std::hypot(x, y) < 0.045f) return true;

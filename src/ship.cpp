@@ -133,13 +133,13 @@ bool pointInPolygon(int nvert, Point2D* points, float testx, float testy)
 
 // Reflect relative velocity about unit normal n: v' = v_body + (v - v_body) - (1+e)((v - v_body)·n) n.
 static void reflectPellet(Pellet& p, Point2D n, Point2D vBody) {
-    float rx = p.vel.x - vBody.x, ry = p.vel.y - vBody.y;
+    float rx = p.velocity.x - vBody.x, ry = p.velocity.y - vBody.y;
     float vn = rx * n.x + ry * n.y;
     if (vn < 0) {
         rx -= (1 + PELLET_BOUNCE) * vn * n.x;
         ry -= (1 + PELLET_BOUNCE) * vn * n.y;
     }
-    p.vel = {vBody.x + rx, vBody.y + ry};
+    p.velocity = {vBody.x + rx, vBody.y + ry};
 }
 
 // Pellet is inside a convex polygon: push it out through the nearest edge and reflect.
@@ -632,7 +632,7 @@ void cloudLayer(float x, float y, float r, float angDeg, RGB c, float a) {
 void launchSpark(Spark& s, Point2D c) {
     float th = randomRange(0, 2 * PI), sp = randomRange(0.002, 0.016);
     s.pos = c;
-    s.vel = {cosf(th) * sp, sinf(th) * sp};
+    s.velocity = {cosf(th) * sp, sinf(th) * sp};
     s.maxLife = s.life = 40 + rand() % 70;
     s.ember = false;
 }
@@ -640,7 +640,7 @@ void launchSpark(Spark& s, Point2D c) {
 void launchEmber(Spark& s, Point2D c, float r) {
     float th = randomRange(0, 2 * PI), d = r * 0.55f * sqrtf(randomRange(0, 1));
     s.pos = {c.x + cosf(th) * d, c.y + sinf(th) * d};
-    s.vel = {randomRange(-0.0003, 0.0003), randomRange(0.0005, 0.0013)};
+    s.velocity = {randomRange(-0.0003, 0.0003), randomRange(0.0005, 0.0013)};
     s.maxLife = s.life = 120 + rand() % 140;
     s.ember = true;
 }
@@ -683,7 +683,7 @@ Ship::explode(void) {
             d.b = {b.x - m.x, b.y - m.y};
             d.pos = {c.x + m.x, c.y + m.y};
             float len = hypotf(m.x, m.y) + 1e-4f, sp = randomRange(0.002, 0.006);
-            d.vel = {m.x / len * sp + randomRange(-0.001, 0.001),
+            d.velocity = {m.x / len * sp + randomRange(-0.001, 0.001),
                      m.y / len * sp + randomRange(0.0005, 0.002)};
             d.ang = 0;
             d.spin = randomRange(-6, 6);
@@ -755,9 +755,7 @@ Ship::explode(void) {
     // Hull edges tumble out, fall, bounce and settle as glowing wreckage.
     for (int i = 0; i < SHIP; ++i) {
         Debris& d = debris[i];
-        d.pos.x += d.vel.x; d.pos.y += d.vel.y;
-        d.vel.x *= 0.99f; d.vel.y *= 0.99f;
-        d.vel.y -= GRAVITY * 6;
+        d.integrate(GRAVITY * 6);          // drag 0.99 baked into the body
         d.ang += d.spin;
         float ca = cosf(d.ang * PI / 180), sa = sinf(d.ang * PI / 180);
         Point2D a = {d.a.x * ca - d.a.y * sa, d.a.x * sa + d.a.y * ca};
@@ -765,8 +763,8 @@ Ship::explode(void) {
         float low = d.pos.y + fminf(a.y, b.y);
         if (low < GROUND) {
             d.pos.y += GROUND - low;
-            if (d.vel.y < 0) d.vel.y = -d.vel.y * 0.3f;
-            d.vel.x *= 0.7f;
+            d.bounceOffStatic({0.0f, 1.0f}, d.restitution); // e=0.3 off the ground
+            d.velocity.x *= 0.7f;              // extra ground friction on the tangent
             d.spin *= 0.6f;
         }
         RGB hull = {shipColor[0], shipColor[1], shipColor[2]};
@@ -796,28 +794,26 @@ Ship::explode(void) {
         float f = (float)s.life / s.maxLife;
         --s.life;
         if (s.ember) {
-            s.vel.x += sinf(t * 0.05f + s.pos.y * 40) * 0.00002f;
-            s.pos.x += s.vel.x; s.pos.y += s.vel.y;
+            s.velocity.x += sinf(t * 0.05f + s.pos.y * 40) * 0.00002f;
+            s.pos.x += s.velocity.x; s.pos.y += s.velocity.y;
             RGB ec = mix(crimson, orange, 0.5f + 0.5f * sinf(t * 0.3f + i));
             float a = sinf(PI * f) * 0.9f;
             glowDisc(s.pos.x, s.pos.y, 0.008f, ec, a);
             glowDisc(s.pos.x, s.pos.y, 0.0025f, hot, a);
             continue;
         }
-        s.pos.x += s.vel.x; s.pos.y += s.vel.y;
-        s.vel.x *= 0.965f; s.vel.y *= 0.965f;
-        s.vel.y -= 0.00004f;
+        s.integrate(0.00004f);             // drag 0.965 baked into the body
         if (s.pos.y < GROUND) {
             s.pos.y = GROUND;
-            s.vel.y = -s.vel.y * 0.4f;
-            s.vel.x *= 0.7f;
+            s.bounceOffStatic({0.0f, 1.0f}, s.restitution); // e=0.4 off the ground
+            s.velocity.x *= 0.7f;              // extra ground friction on the tangent
         }
         RGB sc = f > 0.5f ? mix(orange, hot, (f - 0.5f) * 2) : mix(red, orange, f * 2);
         glBegin(GL_LINES);
         glColor4f(sc.r, sc.g, sc.b, fminf(1.f, f * 1.5f));
         glVertex2f(s.pos.x, s.pos.y);
         glColor4f(sc.r, sc.g, sc.b, 0);
-        glVertex2f(s.pos.x - s.vel.x * 4, s.pos.y - s.vel.y * 4);
+        glVertex2f(s.pos.x - s.velocity.x * 4, s.pos.y - s.velocity.y * 4);
         glEnd();
     }
 
@@ -911,7 +907,7 @@ Ship::fire(void) {
     p->resting = false;
     p->life    = 0;
     p->pos = {spaceShip.offset.x + tip.x, spaceShip.offset.y + tip.y};
-    p->vel = {velocity.x + dir.x * MUZZLE_SPEED, velocity.y + dir.y * MUZZLE_SPEED};
+    p->velocity = {velocity.x + dir.x * MUZZLE_SPEED, velocity.y + dir.y * MUZZLE_SPEED};
 
     velocity.x -= dir.x * RECOIL;
     velocity.y -= dir.y * RECOIL;
@@ -921,10 +917,23 @@ Ship::fire(void) {
 
 void
 Ship::bump(const Pellet& p) {
-    Point2D dv = {p.vel.x - velocity.x, p.vel.y - velocity.y};
+    // TODO (unify): fold this shove AND the pellet's ricochet into ONE
+    // PhysicsBody::resolveImpulse(pellet, normal) call, so a single collision
+    // law handles both bodies. Blocked now only because the pellet arrives
+    // const here and bounceOffConvex does the ricochet a line later; take the
+    // pellet by non-const ref, compute the contact normal once, and let
+    // resolveImpulse write both velocities. Then bounceOffConvex keeps only the
+    // positional push-out, not the reflect. Same physics, one law.
+    // Mass-driven momentum transfer: the shove on this ship is the pellet's
+    // momentum relative to us, scaled by the mass ratio. Heavier/faster pellet
+    // -> bigger bodoink, automatically. (Direction is the approach vector; the
+    // pellet's own ricochet off the hull is handled by bounceOffConvex.)
+    Point2D dv = {p.velocity.x - velocity.x, p.velocity.y - velocity.y};
     Point2D r  = {p.pos.x - spaceShip.offset.x, p.pos.y - spaceShip.offset.y};
-    velocity.x += dv.x * PELLET_KICK;
-    velocity.y += dv.y * PELLET_KICK;
+    float massRatio = p.mass / (p.mass + mass);   // 0..1; pellet's share of the pair
+    float transfer = (1.0f + fminf(p.restitution, restitution)) * massRatio;
+    velocity.x += dv.x * transfer;
+    velocity.y += dv.y * transfer;
     ang += (r.x * dv.y - r.y * dv.x) * PELLET_SPIN_KICK;
     landed = false;
     onPad = false;
@@ -967,17 +976,20 @@ Ship::updatePellets(Ship& other) {
             continue;
         }
 
-        p.vel.y -= PELLET_GRAVITY;
-        p.pos.x += p.vel.x;
-        p.pos.y += p.vel.y;
+        p.integrate(PELLET_GRAVITY);       // drag 1.0: pellets don't self-damp
         if (p.pos.x < -1.75f) p.pos.x += 3.5f;
         if (p.pos.x >  1.75f) p.pos.x -= 3.5f;
 
         if (p.pos.y <= GROUND + PELLET_RADIUS) {
             p.pos.y = GROUND + PELLET_RADIUS;
-            p.vel = {0, 0};
-            p.resting = true;
-            p.life = 0;
+            p.bounceOffStatic({0.0f, 1.0f}, p.restitution); // e=0.6: ~3 bounces from top, ~2 from mid
+            p.velocity.x *= 0.85f;                           // a little ground friction on the roll
+            // Settle to resting only once the hop is too small to see.
+            if (p.velocity.y < PELLET_REST_SPEED) {
+                p.velocity = {0, 0};
+                p.resting = true;
+                p.life = 0;
+            }
             continue;
         }
 

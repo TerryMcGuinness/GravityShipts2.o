@@ -195,7 +195,9 @@ static bool curated() {
         Scenario s(40);
         s.cpu.reset({0, 0});
         s.cpu.setBallLocation({1, 0.5f}, 0.01f);
-        s.human.pellets[0] = {{0.1f, 0.002f}, {-0.01f, 0}, 10, true, false};
+        { Pellet pel; pel.pos = {0.1f, 0.002f}; pel.velocity = {-0.01f, 0};
+          pel.life = 10; pel.active = true; pel.resting = false;
+          s.human.pellets[0] = pel; }
         s.step();
         bool evaded = s.controller.decision().goal == ai::Goal::Evade;
         s.human.pellets[0].active = false;
