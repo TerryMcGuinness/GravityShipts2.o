@@ -44,7 +44,15 @@ public:
 
     float invMass() const { return mass > 0.0f ? 1.0f / mass : 0.0f; }
 
-    // Integrate one frame: apply gravity (if any) then move.
+    // Apply an impulse (momentum, kg*units/frame): dv = J / m. Thrust, recoil,
+    // explosions all go through here so mass matters everywhere.
+    void applyImpulse(Point2D J) {
+        float im = invMass();
+        velocity.x += J.x * im;
+        velocity.y += J.y * im;
+    }
+
+    // Integrate one frame: apply gravity (if any) then move (semi-implicit Euler).
     void integrate(float gravity) {
         velocity.x *= drag;            // per-body linear damping (1.0 = none)
         velocity.y *= drag;

@@ -47,6 +47,7 @@ const float ANGLE_FACTOR    = 0.0004;
 
 // Ship-on-ship rigid-body collision (Phase 1: linear momentum).
 const float SHIP_MASS        = 1.0f;    // both ships equal mass
+const float SHIP_THRUST      = VELOCITY_FACTOR * SHIP_MASS; // impulse per frame of burn; feel preserved at mass 1
 const float SHIP_RESTITUTION = 0.6f;    // e: 1=elastic, 0=inelastic; lowered by damage later
 
 const float GROUND = -1.0;
@@ -166,8 +167,9 @@ class Ship : public PhysicsBody {
     // Ship IS a PhysicsBody: velocity/mass/restitution live in the base and
     // every bounce goes through resolveImpulse / bounceOffStatic. Position
     // stays on spaceShip.offset (the hull geometry is anchored there); the
-    // base `pos` and integrate() are NOT used by ships -- updatePosition()
-    // owns thrust, rotation and gravity.
+    // base `pos` is synced from/to it around integrate() in updatePosition();
+    // thrust is an applyImpulse along the nose. Rotation stays ship-owned
+    // (angular motion is Phase 2).
 
 private:
     

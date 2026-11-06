@@ -239,7 +239,7 @@ Ship::reset(Point2D resetPoint) {
         spaceShip.location[i].y = spaceShip.vertices[i].y + resetPoint.y;
     }
     velocity.x = 0.0 ; velocity.y = 0.0 ;
-    mass = SHIP_MASS; restitution = SHIP_RESTITUTION;   // PhysicsBody fields
+    mass = SHIP_MASS; restitution = SHIP_RESTITUTION; drag = 1.0f;   // PhysicsBody fields (ships: no drag)
     
     landed = false ;
     spaceShip.ball.ballhit = false ;
@@ -827,8 +827,9 @@ Ship::thrust() {
     
     fuel -= FUEL_THRUST ;
     thrusting = true;
-    velocity.x -= spaceShip.vertices[3].x*velocityFactor;
-    velocity.y -= spaceShip.vertices[3].y*velocityFactor;
+    // Thrust is an impulse along the nose (vertex 3 is the tail, hence the minus).
+    applyImpulse({ -spaceShip.vertices[3].x * SHIP_THRUST,
+                   -spaceShip.vertices[3].y * SHIP_THRUST });
     
     glLineWidth(.5);
     glColor3f(1.0, 0.0, 0.0);
@@ -854,16 +855,15 @@ Point2D Ship::rotatePoints(Point2D p, float ang)
 }
 
 void Ship::updatePosition(void) {
-    spaceShip.offset.x += velocity.x ;
-    spaceShip.offset.y += velocity.y ;
-   
+    // The hull is anchored on spaceShip.offset; PhysicsBody::integrate() owns
+    // the law (drag, gravity, move). Sync in, integrate, sync out, rebuild hull.
+    pos = spaceShip.offset;
+    integrate(landed ? 0.0f : gravity);
+    spaceShip.offset = pos;
+
     for(int i = 0 ; i < SHIP; ++i) {
         spaceShip.location[i].x = spaceShip.vertices[i].x + spaceShip.offset.x ;
         spaceShip.location[i].y = spaceShip.vertices[i].y + spaceShip.offset.y ;
-    }
-    
-    if( !landed ) {
-       velocity.y -= gravity ;
     }
 }
 

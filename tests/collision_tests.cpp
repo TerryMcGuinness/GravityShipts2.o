@@ -105,5 +105,24 @@ int main() {
         check(!body.bounceOffStatic({0.0f, 1.0f}, s.restitution), "moving away: no second bounce");
     }
 
+    // --- Ship integrates through PhysicsBody: gravity, landed, impulse/mass ---
+    {
+        Ship s = makeShip(0.0f, 0.5f, 0.0f, 0.0f);
+        s.landed = false;
+        s.updatePosition();
+        check(std::fabs(s.velocity.y + GRAVITY) < 1e-9f, "updatePosition applies gravity via integrate()");
+        check(std::fabs(s.spaceShip.offset.y - (0.5f - GRAVITY)) < 1e-6f, "offset synced back from pos");
+        check(std::fabs(s.spaceShip.location[0].y - (s.spaceShip.vertices[0].y + s.spaceShip.offset.y)) < 1e-6f, "hull rebuilt on offset");
+
+        Ship l = makeShip(0.0f, 0.5f, 0.0f, 0.0f);
+        l.landed = true;
+        l.updatePosition();
+        check(l.velocity.y == 0.0f, "landed ship: no gravity");
+
+        PhysicsBody light(1.0f, {0,0}, {0,0}, 1.0f), heavy(2.0f, {0,0}, {0,0}, 1.0f);
+        light.applyImpulse({0.0f, 0.01f}); heavy.applyImpulse({0.0f, 0.01f});
+        check(std::fabs(light.velocity.y - 2.0f * heavy.velocity.y) < 1e-9f, "same impulse: double mass -> half dv");
+    }
+
     return failures ? 1 : 0;
 }

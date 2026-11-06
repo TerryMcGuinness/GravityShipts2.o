@@ -12,6 +12,16 @@ as part of the same work (see .github/copilot-instructions.md).
 ## [Unreleased]
 
 ### Changed
+- Ship motion now runs through PhysicsBody: updatePosition() syncs
+  spaceShip.offset -> pos, calls integrate() (gravity 0 when landed, drag 1),
+  syncs back and rebuilds the hull. Thrust is PhysicsBody::applyImpulse along
+  the nose with SHIP_THRUST = VELOCITY_FACTOR * SHIP_MASS, so acceleration is
+  F/m (feel unchanged at mass 1; heavier/damaged ships will fly heavier).
+  Integration order is now semi-implicit Euler (gravity then move); at
+  GRAVITY=1e-5 this is imperceptible and the AI scenarios still pass.
+- PhysicsBody gains applyImpulse(J): dv = J/m, for thrust/recoil/explosions.
+- collision_tests: gravity-through-integrate, landed=no-gravity, offset/hull
+  sync, and double-mass-half-dv cases.
 - Ship now derives from PhysicsBody. velocity/mass/restitution come from the
   base; Ship::resolveCollision keeps the SAT contact + mass-split separation and
   delegates the impulse to PhysicsBody::resolveImpulse. Position stays on
