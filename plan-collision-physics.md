@@ -98,3 +98,11 @@ over-spin. Build only after Phase 1 conserves momentum and passes tests.
 5. Tests: off-center hit induces spin; center hit induces none; angular +
    linear momentum both conserved; cap/tune so spin stays believable.
 6. Update README + CHANGELOG as part of the same work.
+
+### Phase 2 status (2026-11-06)
+Phase 1 complete and merged to main (c70218a): PhysicsBody base; Pellet/Debris/
+Spark/Ship all derive from it; every bounce goes through resolveImpulse or
+bounceOffStatic; ship motion via integrate()/applyImpulse. All 4 CTest suites
+green. Phase 2 not started -- next session begins at step 1 (moment of
+inertia + angular velocity on PhysicsBody; Ship::ang already exists). Needs
+convexMTV to also return the contact point (step 2). Branch name: `ship_spin`.
