@@ -298,3 +298,16 @@ AI frameworks, and new runtime dependencies.
   assessment of sound quality.
 - Closed all test game instances. Screenshots are retained in session `files/`;
   no unrelated repository changes were overwritten or committed.
+
+## Issues from TV playtest 2026-11-06 (first 4K session, ship_physics_body)
+
+- [ ] **Remaining-balls indicator reads as a pickup target.** At stage 4 (smallest
+  ball) the HUD's balls-left dots are the same size/colour as the live ball and
+  Terry flew to the wrong one. Make the indicator visually distinct: hollow
+  rings, a different shape, or dim/grey, and keep it out of the play area.
+- [ ] **AI pilot runs its tank dry and strands on the floor.** Observed the cyan
+  AI ship sitting on the ground out of fuel for the rest of the match. The AI
+  needs a fuel budget: estimate fuel-to-pad and head home to refuel before it
+  drops below that reserve (ai.cpp). Add an ai_scenarios case: starting with
+  low fuel far from pad, the AI must reach the pad before empty.
+- Feel note: ground/pad restitution 0.6 played fine on the TV; no superball.
