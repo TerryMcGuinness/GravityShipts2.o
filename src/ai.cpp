@@ -24,7 +24,7 @@ ShipView snapshot(const Ship& ship) {
     v.position = ship.spaceShip.offset;
     v.velocity = ship.velocity;
     v.heading = heading(ship.spaceShip.vertices[0]);
-    v.spin = ship.ang;
+    v.spin = ship.angVel;
     v.fuel = ship.fuel;
     v.score = ship.score;
     v.ammo = ship.ammo;

@@ -11,6 +11,25 @@ as part of the same work (see .github/copilot-instructions.md).
 
 ## [Unreleased]
 
+### Added
+- Phase 2 physics: spin. PhysicsBody gains angVel, inertia, velocityAt(r),
+  applyImpulseAt(J, r) and resolveImpulseAt(other, n, rA, rB) -- the coupled
+  linear+angular impulse j = -(1+e) vn / (1/mA + 1/mB + (rA x n)^2/IA +
+  (rB x n)^2/IB) through a contact point. resolveImpulse() is now the r=0
+  case. Linear AND angular momentum are conserved; at e=1 so is total KE
+  (translational + rotational).
+- Ship: `ang` renamed angVel and moved into the base (it always was an angular
+  velocity -- rotateShip turns the hull by it each frame). SHIP_INERTIA=0.01,
+  SHIP_SPIN_MAX=0.06 rad/frame cap after collisions.
+- Ship-on-ship uses the deepest penetrating hull vertex as the contact point,
+  so a nose-into-side hit shoves AND spins; a square hit is a pure shove.
+- Pellets: Ship::bump runs the coupled impulse at the hit point (lever arm from
+  the ship centre), replacing the hand-tuned transfer + PELLET_SPIN_KICK. Pellet
+  mass 0.15 -> 0.3 so hits have real wallop.
+- collision_tests: off-centre -> spin / centre -> none / L and p conserved;
+  elastic head-on now checks linear+rotational KE and that spin stays under
+  the cap (0.003 inertia hit the cap and sank energy -- hence 0.01).
+
 ### Changed
 - Ship motion now runs through PhysicsBody: updatePosition() syncs
   spaceShip.offset -> pos, calls integrate() (gravity 0 when landed, drag 1),

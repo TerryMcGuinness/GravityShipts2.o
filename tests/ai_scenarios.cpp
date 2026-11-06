@@ -121,7 +121,7 @@ static bool curated() {
         s.cpu.setBallLocation({-0.6f, -0.4f}, 0.01f);
         s.cpu.spaceShip.ball.ballhit = s.cpu.spaceShip.ball.ballhitonce = true;
         s.cpu.velocity = {0.004f, -0.002f};
-        s.cpu.ang = 0.05f;
+        s.cpu.angVel = 0.05f;
         s.refresh();
         check(s.scoreWithin(18000), "spin recovery and narrow raised landing");
     }
@@ -303,7 +303,7 @@ static bool delivery(int seed, int stage, int difficulty, std::vector<double>& t
               << " phase=" << int(controller.phase()) << " fuel=" << cpu.fuel
               << " pos=" << cpu.spaceShip.offset.x << ',' << cpu.spaceShip.offset.y
               << " vel=" << cpu.velocity.x << ',' << cpu.velocity.y
-              << " heading=" << ai::heading(cpu.spaceShip.vertices[0]) << " spin=" << cpu.ang
+              << " heading=" << ai::heading(cpu.spaceShip.vertices[0]) << " spin=" << cpu.angVel
               << " ball=" << cpu.spaceShip.ball.ballLocation.x << ',' << cpu.spaceShip.ball.ballLocation.y
               << " pad=" << cpu.landingLocation.x << ',' << cpu.landingLocation.y << '\n';
     return false;

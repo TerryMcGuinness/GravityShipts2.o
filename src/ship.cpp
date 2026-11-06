@@ -208,7 +208,7 @@ Ship::setShipColor(GLfloat* color) {
 
 void
 Ship::reset(Point2D resetPoint) {
-    ang = 0;
+    angVel = 0;
     spaceShip.vertices[0].x =  .00 ; spaceShip.vertices[0].y =  .02 ;
     spaceShip.vertices[1].x =  .01 ; spaceShip.vertices[1].y =  .00 ;
     spaceShip.vertices[2].x =  .02 ; spaceShip.vertices[2].y = -.02 ;
@@ -239,7 +239,7 @@ Ship::reset(Point2D resetPoint) {
         spaceShip.location[i].y = spaceShip.vertices[i].y + resetPoint.y;
     }
     velocity.x = 0.0 ; velocity.y = 0.0 ;
-    mass = SHIP_MASS; restitution = SHIP_RESTITUTION; drag = 1.0f;   // PhysicsBody fields (ships: no drag)
+    mass = SHIP_MASS; restitution = SHIP_RESTITUTION; drag = 1.0f; inertia = SHIP_INERTIA;   // PhysicsBody fields (ships: no drag)
     
     landed = false ;
     spaceShip.ball.ballhit = false ;
@@ -264,14 +264,14 @@ Ship::reset(Point2D resetPoint) {
 
 void Ship::rotateShip(void) {
     for(int i=0 ; i < SHIP ; i++) {
-        spaceShip.vertices[i] = rotatePoints(spaceShip.vertices[i], ang);
+        spaceShip.vertices[i] = rotatePoints(spaceShip.vertices[i], angVel);
     }
     for(int i=0 ; i< tailPoints ; i++) {
-        tail[i] = rotatePoints(tail[i],ang);
+        tail[i] = rotatePoints(tail[i],angVel);
     }
     for(int i=0 ; i<thrustPoints ; i++) {
-        leftThrust[i] = rotatePoints(leftThrust[i], ang);
-        rightThrust[i] = rotatePoints(rightThrust[i], ang);
+        leftThrust[i] = rotatePoints(leftThrust[i], angVel);
+        rightThrust[i] = rotatePoints(rightThrust[i], angVel);
     }
 }
 
@@ -285,7 +285,7 @@ Ship::rotateCounterClockWise(void) {
     
     rotDir = -1;
     fuel -= FUEL_ROTATE ;
-    ang += angFactor;
+    angVel += angFactor;
     
     glLineWidth(.5);
     glColor3f(1.0, 0.0, 0.0);
@@ -308,7 +308,7 @@ Ship::rotateClockWise(void) {
     
     rotDir = 1;
     fuel -= FUEL_ROTATE ;
-    ang -= angFactor;
+    angVel -= angFactor;
     
     glLineWidth(.5);
     glColor3f(1.0, 0.0, 0.0);
@@ -455,9 +455,30 @@ Ship::resolveCollision(Ship& other) {
         other.spaceShip.location[i].x -= mtv.x * sepB;  other.spaceShip.location[i].y -= mtv.y * sepB;
     }
 
-    // Impulse along the normal: the one shared law (momentum conserved, pair
-    // restitution = min so damage reads as a deader collision).
-    return resolveImpulse(other, { nx, ny });
+    // Contact point: the vertex penetrating deepest along the normal, from
+    // whichever hull it belongs to. Lever arms from each centre to it decide
+    // how much of the impulse becomes spin (Phase 2).
+    Point2D c = hullA[0]; float bestDepth = -INFINITY;
+    float bMax = -INFINITY, aMin = INFINITY;
+    for (int k = 0; k < 3; ++k) {
+        bMax = fmaxf(bMax, hullB[k].x * nx + hullB[k].y * ny);
+        aMin = fminf(aMin, hullA[k].x * nx + hullA[k].y * ny);
+    }
+    for (int k = 0; k < 3; ++k) {
+        float dA = bMax - (hullA[k].x * nx + hullA[k].y * ny);
+        if (dA > bestDepth) { bestDepth = dA; c = hullA[k]; }
+        float dB = (hullB[k].x * nx + hullB[k].y * ny) - aMin;
+        if (dB > bestDepth) { bestDepth = dB; c = hullB[k]; }
+    }
+    Point2D rA = { c.x - spaceShip.offset.x,       c.y - spaceShip.offset.y };
+    Point2D rB = { c.x - other.spaceShip.offset.x, c.y - other.spaceShip.offset.y };
+
+    // The one shared law: coupled linear+angular impulse, momentum conserved,
+    // pair restitution = min so damage reads as a deader collision.
+    bool hit = resolveImpulseAt(other, { nx, ny }, rA, rB);
+    angVel       = fmaxf(-SHIP_SPIN_MAX, fminf(SHIP_SPIN_MAX, angVel));
+    other.angVel = fmaxf(-SHIP_SPIN_MAX, fminf(SHIP_SPIN_MAX, other.angVel));
+    return hit;
 }
 
 // Returns true on an actual impact (ship moving into the pad).
@@ -540,7 +561,7 @@ Ship::inBounds(void) {
                 landedOnPad = true ;
                 onPad = true ;
                 velocity.x = velocity.y = 0.0 ;
-                ang = 0.0 ;
+                angVel = 0.0 ;
                 if (!wasOnPad)
                     sfx::play(sfx::Chime, spaceShip.offset.x, 1.f, id);
                 return;
@@ -904,24 +925,16 @@ Ship::fire(void) {
 
 void
 Ship::bump(const Pellet& p) {
-    // TODO (unify): fold this shove AND the pellet's ricochet into ONE
-    // PhysicsBody::resolveImpulse(pellet, normal) call, so a single collision
-    // law handles both bodies. Blocked now only because the pellet arrives
-    // const here and bounceOffConvex does the ricochet a line later; take the
-    // pellet by non-const ref, compute the contact normal once, and let
-    // resolveImpulse write both velocities. Then bounceOffConvex keeps only the
-    // positional push-out, not the reflect. Same physics, one law.
-    // Mass-driven momentum transfer: the shove on this ship is the pellet's
-    // momentum relative to us, scaled by the mass ratio. Heavier/faster pellet
-    // -> bigger bodoink, automatically. (Direction is the approach vector; the
-    // pellet's own ricochet off the hull is handled by bounceOffConvex.)
-    Point2D dv = {p.velocity.x - velocity.x, p.velocity.y - velocity.y};
-    Point2D r  = {p.pos.x - spaceShip.offset.x, p.pos.y - spaceShip.offset.y};
-    float massRatio = p.mass / (p.mass + mass);   // 0..1; pellet's share of the pair
-    float transfer = (1.0f + fminf(p.restitution, restitution)) * massRatio;
-    velocity.x += dv.x * transfer;
-    velocity.y += dv.y * transfer;
-    ang += (r.x * dv.y - r.y * dv.x) * PELLET_SPIN_KICK;
+    // Phase 2: the pellet hits at lever arm r from our centre. Run the coupled
+    // impulse against a COPY of the pellet so the ship gets shove + spin by the
+    // one law (mass ratio, pair restitution, lever arm) while the pellet's own
+    // ricochet is still done by bounceOffConvex a line later.
+    PhysicsBody pellet = p;
+    Point2D r = { p.pos.x - spaceShip.offset.x, p.pos.y - spaceShip.offset.y };
+    float len = sqrtf(r.x * r.x + r.y * r.y);
+    Point2D n = len > 0.0f ? Point2D{ r.x / len, r.y / len } : Point2D{ 0.0f, 1.0f }; // pellet -> ship
+    resolveImpulseAt(pellet, n, r, { 0.0f, 0.0f });
+    angVel = fmaxf(-SHIP_SPIN_MAX, fminf(SHIP_SPIN_MAX, angVel));
     landed = false;
     onPad = false;
     sfx::play(sfx::Ping, spaceShip.offset.x, 1.f, id);

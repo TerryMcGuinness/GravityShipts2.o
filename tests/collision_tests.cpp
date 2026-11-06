@@ -29,9 +29,13 @@ static float momentumX(const Ship& a, const Ship& b) {
 static float momentumY(const Ship& a, const Ship& b) {
     return a.mass * a.velocity.y + b.mass * b.velocity.y;
 }
+// Total kinetic energy, translational + rotational (Phase 2: a nose-into-side
+// contact is off-centre even when the ships close head-on, so some KE lives
+// in spin; at e=1 the SUM is what is conserved).
 static float kinetic(const Ship& a, const Ship& b) {
     auto ke = [](const Ship& s) {
-        return 0.5f * s.mass * (s.velocity.x*s.velocity.x + s.velocity.y*s.velocity.y);
+        return 0.5f * s.mass * (s.velocity.x*s.velocity.x + s.velocity.y*s.velocity.y)
+             + 0.5f * s.inertia * s.angVel * s.angVel;
     };
     return ke(a) + ke(b);
 }
@@ -46,7 +50,8 @@ int main() {
         check(hit, "elastic head-on registers impact");
         check(std::fabs(momentumX(a, b) - px0) < 1e-6f, "elastic: X momentum conserved");
         check(std::fabs(momentumY(a, b) - py0) < 1e-6f, "elastic: Y momentum conserved");
-        check(std::fabs(kinetic(a, b) - k0) < 1e-6f, "elastic: kinetic energy conserved");
+        check(std::fabs(a.angVel) < SHIP_SPIN_MAX && std::fabs(b.angVel) < SHIP_SPIN_MAX, "elastic: spin stays under the cap (cap would sink energy)");
+        check(std::fabs(kinetic(a, b) - k0) < 1e-6f, "elastic: kinetic energy (linear + rotational) conserved");
     }
 
     // Head-on, equal mass, perfectly inelastic (e=0): common velocity, KE drops.
@@ -63,8 +68,12 @@ int main() {
         float nlen = std::sqrt(nx*nx + ny*ny);
         check(nlen > 1e-9f, "inelastic: an impulse occurred");
         nx /= nlen; ny /= nlen;
+        // With spin, e=0 removes the closing speed AT THE CONTACT, not between
+        // the centres; between the centres it must at least no longer be closing
+        // as fast as before (was 0.02 head-on).
         float rvn = (a.velocity.x - b.velocity.x) * nx + (a.velocity.y - b.velocity.y) * ny;
-        check(std::fabs(rvn) < 1e-6f, "inelastic: normal relative velocity removed");
+        check(std::fabs(rvn) < 0.02f * 0.5f, "inelastic: centre closing speed mostly removed");
+        check(a.angVel != 0.0f || b.angVel != 0.0f, "inelastic head-on: triangle contact is off-centre, spin induced");
         check(kinetic(a, b) < k0 - 1e-7f, "inelastic: kinetic energy drops");
     }
 
@@ -122,6 +131,31 @@ int main() {
         PhysicsBody light(1.0f, {0,0}, {0,0}, 1.0f), heavy(2.0f, {0,0}, {0,0}, 1.0f);
         light.applyImpulse({0.0f, 0.01f}); heavy.applyImpulse({0.0f, 0.01f});
         check(std::fabs(light.velocity.y - 2.0f * heavy.velocity.y) < 1e-9f, "same impulse: double mass -> half dv");
+    }
+
+    // --- Phase 2: off-centre impulse -> spin; centre hit -> none; L conserved ---
+    {
+        auto angMomentum = [](const PhysicsBody& b) { // about the origin
+            return b.inertia * b.angVel + b.mass * (b.pos.x * b.velocity.y - b.pos.y * b.velocity.x);
+        };
+        // A moving +x hits B (at rest) with the contact 0.02 above B's centre.
+        PhysicsBody a(1.0f, {-0.05f, 0.02f}, { 0.01f, 0.0f}, 1.0f), b(1.0f, {0.0f, 0.0f}, {0,0}, 1.0f);
+        a.inertia = b.inertia = 0.003f;
+        Point2D contact{ -0.025f, 0.02f };
+        Point2D rA{ contact.x - a.pos.x, contact.y - a.pos.y }, rB{ contact.x - b.pos.x, contact.y - b.pos.y };
+        float L0 = angMomentum(a) + angMomentum(b);
+        float px0 = a.mass * a.velocity.x + b.mass * b.velocity.x;
+        check(a.resolveImpulseAt(b, {-1.0f, 0.0f}, rA, rB), "off-centre hit resolves");
+        check(std::fabs(b.angVel) > 1e-4f,  "off-centre hit puts spin on the target");
+        check(std::fabs(a.angVel) < 1e-6f,  "contact in line with A's centre: A does not spin");
+        check(std::fabs(angMomentum(a) + angMomentum(b) - L0) < 1e-6f, "angular momentum conserved");
+        check(std::fabs(a.mass * a.velocity.x + b.mass * b.velocity.x - px0) < 1e-6f, "linear momentum conserved");
+
+        PhysicsBody c(1.0f, {-0.05f, 0.0f}, { 0.01f, 0.0f}, 1.0f), d(1.0f, {0.0f, 0.0f}, {0,0}, 1.0f);
+        c.inertia = d.inertia = 0.003f;
+        c.resolveImpulseAt(d, {-1.0f, 0.0f}, {0.025f, 0.0f}, {-0.025f, 0.0f});
+        check(c.angVel == 0.0f && d.angVel == 0.0f, "centre hit: pure shove, no spin");
+        check(std::fabs(d.velocity.x - 0.01f) < 1e-6f, "centre hit, e=1, equal mass: full velocity exchange");
     }
 
     return failures ? 1 : 0;

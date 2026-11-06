@@ -47,7 +47,9 @@ const float ANGLE_FACTOR    = 0.0004;
 
 // Ship-on-ship rigid-body collision (Phase 1: linear momentum).
 const float SHIP_MASS        = 1.0f;    // both ships equal mass
-const float SHIP_THRUST      = VELOCITY_FACTOR * SHIP_MASS; // impulse per frame of burn; feel preserved at mass 1
+const float SHIP_THRUST      = VELOCITY_FACTOR * SHIP_MASS;
+const float SHIP_INERTIA     = 0.01f;   // moment of inertia; tune: smaller = spinnier. 0.003 hit the spin cap on a head-on (energy sink)
+const float SHIP_SPIN_MAX    = 0.06f;   // rad/frame cap after a collision so ships never pinwheel // impulse per frame of burn; feel preserved at mass 1
 const float SHIP_RESTITUTION = 0.6f;    // e: 1=elastic, 0=inelastic; lowered by damage later
 
 const float GROUND = -1.0;
@@ -127,7 +129,7 @@ struct Pellet : PhysicsBody {
     int  life    = 0;
     bool active  = false;
     bool resting = false;
-    Pellet() { mass = 0.15f; restitution = PELLET_BOUNCE; drag = 1.0f; }  // light vs ship's 1.0 -> modest bodoink
+    Pellet() { mass = 0.3f; restitution = PELLET_BOUNCE; drag = 1.0f; }   // vs ship's 1.0: a real bodoink (was 0.15)
 };
 
 struct Debris : PhysicsBody {   // one hull edge flung free, endpoints relative to pos
@@ -233,7 +235,8 @@ public:
     ShipBall otherShipBall;
     bool hitOtherBall;
     
-    float ang ;
+    // angVel (was `ang`): angular velocity, rad/frame, inherited from PhysicsBody.
+    // rotateShip() turns the hull by it every frame; the rotate keys nudge it.
     // velocity, mass (SHIP_MASS) and restitution (SHIP_RESTITUTION, lowered by
     // damage later) are inherited from PhysicsBody; set in the constructor.
     // Resolve a Newtonian impulse against another ship along the SAT normal.
@@ -260,7 +263,7 @@ public:
     void fire(void);
     void updatePellets(Ship& other);
     void drawPellets(void);
-    void bump(const Pellet& p);
+    void bump(const Pellet& p);   // coupled impulse at the hit point: shove + spin
     
     bool pointWasInPolygon ;
 
