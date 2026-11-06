@@ -55,8 +55,9 @@ const float SHIP_RESTITUTION = 0.6f;    // e: 1=elastic, 0=inelastic; lowered by
 const float GROUND = -1.0;
 const int   WIN_SCORE = 5;
 
-const int   PELLET_MAX         = 24;
-const int   AMMO_CAPACITY      = 6;
+const int   PELLET_MAX         = 64;     // live rounds in flight/resting before recycling (24 -> 64 with 10 rounds/dot)
+const int   AMMO_CAPACITY      = 6;      // HUD dots
+const int   ROUNDS_PER_AMMO    = 10;     // rounds per dot (playtest 2026-11-06: "10x more pellets")
 const int   FIRE_COOLDOWN      = 12;     // frames between shots
 const int   AMMO_RECHARGE      = 45;     // frames per round while sitting on own pad
 const int   PELLET_REST_FRAMES = 900;    // spent rounds lie on the ground this long
@@ -64,7 +65,7 @@ const float PELLET_RADIUS      = 0.004;
 const float PELLET_GRAVITY     = 0.0001;
 const float PELLET_REST_SPEED  = 0.0018;  // below this upward speed after a bounce, the pellet settles
 const float MUZZLE_SPEED       = 0.010;
-const float RECOIL             = 0.0006;
+const float RECOIL_FRACTION    = 0.05;   // fraction of the pellet's momentum kicked back into the ship (1.0 = fully physical; too much for play)
 const float PELLET_KICK        = 0.25;   // fraction of pellet momentum given to the target
 const float PELLET_SPIN_KICK   = 8.0;
 const float PICKUP_RADIUS      = 0.03;
@@ -129,7 +130,7 @@ struct Pellet : PhysicsBody {
     int  life    = 0;
     bool active  = false;
     bool resting = false;
-    Pellet() { mass = 0.3f; restitution = PELLET_BOUNCE; drag = 1.0f; }   // vs ship's 1.0: a real bodoink (was 0.15)
+    Pellet() { mass = 0.6f; restitution = PELLET_BOUNCE; drag = 1.0f; }   // vs ship's 1.0: a real wallop (0.15 -> 0.3 -> 0.6 by playtest)
 };
 
 struct Debris : PhysicsBody {   // one hull edge flung free, endpoints relative to pos
@@ -258,6 +259,7 @@ public:
 
     Pellet pellets[PELLET_MAX];
     int  ammo;
+    int  roundsFired = 0;   // rounds spent from the current dot
     int  fireCooldown;
     int  ammoRecharge;
     void fire(void);

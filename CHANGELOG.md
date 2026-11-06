@@ -12,6 +12,15 @@ as part of the same work (see .github/copilot-instructions.md).
 ## [Unreleased]
 
 ### Added
+- Playtest fixes (TV, 2026-11-06): Ship::bump had its contact normal
+  backwards (ship->pellet instead of pellet->ship), so the solver saw a
+  separating pair and EVERY pellet hit on a ship was a silent no-op; the
+  second attempt used the radial direction, which passes through the centre
+  and can never spin. Normal is now the pellet's travel direction relative to
+  the ship. Pellet mass 0.3 -> 0.6. Recoil is now an impulse of
+  RECOIL_FRACTION (0.05) of the round's momentum (was a flat 0.0006).
+  ROUNDS_PER_AMMO=10: each HUD dot is ten rounds; PELLET_MAX 24 -> 64.
+  GS_INFINITE_AMMO=1 env var for test sessions. Regression tests added.
 - Phase 2 physics: spin. PhysicsBody gains angVel, inertia, velocityAt(r),
   applyImpulseAt(J, r) and resolveImpulseAt(other, n, rA, rB) -- the coupled
   linear+angular impulse j = -(1+e) vn / (1/mA + 1/mB + (rA x n)^2/IA +

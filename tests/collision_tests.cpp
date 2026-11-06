@@ -158,5 +158,22 @@ int main() {
         check(std::fabs(d.velocity.x - 0.01f) < 1e-6f, "centre hit, e=1, equal mass: full velocity exchange");
     }
 
+    // --- Pellet hit: ship actually moves (normal sign regression) and off-centre spins ---
+    {
+        Ship s = makeShip(0.0f, 0.5f, 0.0f, 0.0f);
+        s.landed = false;
+        Pellet p; p.active = true;
+        p.pos = { s.spaceShip.offset.x - 0.02f, s.spaceShip.offset.y + 0.015f };  // from the left, above centre
+        p.velocity = { 0.01f, 0.0f };
+        s.bump(p);
+        check(s.velocity.x > 1e-4f, "pellet from the left shoves the ship right (was a no-op with the normal reversed)");
+        check(std::fabs(s.angVel) > 1e-5f, "pellet above centre puts spin on the ship");
+        Ship c = makeShip(0.0f, 0.5f, 0.0f, 0.0f); c.landed = false;
+        Pellet q; q.active = true; q.pos = { c.spaceShip.offset.x - 0.02f, c.spaceShip.offset.y }; q.velocity = { 0.01f, 0.0f };
+        c.bump(q);
+        check(std::fabs(c.angVel) < 1e-7f, "pellet through the centre: shove, no spin");
+        check(c.velocity.x > s.velocity.x, "centre hit shoves harder than off-centre (some impulse went to spin)");
+    }
+
     return failures ? 1 : 0;
 }

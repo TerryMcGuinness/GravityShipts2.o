@@ -230,14 +230,14 @@ static bool curated() {
             auto o = ai::observe(s.cpu, s.human, s.frame++);
             auto controls = s.controller.update(o);
             auto velocity = s.cpu.velocity;
-            int ammo = s.cpu.ammo;
+            int ammo = s.cpu.ammo, rounds = s.cpu.roundsFired;   // a shot moves one or the other (ROUNDS_PER_AMMO per dot)
             ai::apply(s.cpu, controls);
-            if (s.cpu.ammo < ammo) {
+            if (s.cpu.ammo < ammo || s.cpu.roundsFired != rounds) {
                 fired = true;
                 recoil = s.cpu.velocity.y < velocity.y;
-                int after = s.cpu.ammo;
+                int after = s.cpu.ammo, afterRounds = s.cpu.roundsFired;
                 s.cpu.fire();
-                check(s.cpu.ammo == after, "fire cooldown uses production method");
+                check(s.cpu.ammo == after && s.cpu.roundsFired == afterRounds, "fire cooldown uses production method");
                 break;
             }
             updateShip(s.cpu);

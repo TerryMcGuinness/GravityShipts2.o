@@ -1,3 +1,4 @@
+#include <cstdlib>
 //
 //  ship.cpp
 //  opengl-series
@@ -257,6 +258,7 @@ Ship::reset(Point2D resetPoint) {
 
     for (int i = 0; i < PELLET_MAX; ++i) pellets[i].active = false;
     ammo = AMMO_CAPACITY;
+    roundsFired = 0;
     fireCooldown = 0;
     ammoRecharge = 0;
     
@@ -892,7 +894,7 @@ void
 Ship::fire(void) {
     if (fireCooldown > 0) return;
     fireCooldown = FIRE_COOLDOWN;
-    if (ammo <= 0) {
+    if (ammo <= 0 && !getenv("GS_INFINITE_AMMO")) {   // test hook: GS_INFINITE_AMMO=1
         sfx::play(sfx::Dry, spaceShip.offset.x, 1.f, id);
         return;
     }
@@ -910,15 +912,16 @@ Ship::fire(void) {
     float len = sqrtf(tip.x * tip.x + tip.y * tip.y);
     Point2D dir = {tip.x / len, tip.y / len};
 
-    --ammo;
+    if (!getenv("GS_INFINITE_AMMO") && ++roundsFired >= ROUNDS_PER_AMMO) { roundsFired = 0; --ammo; }   // one HUD dot = ROUNDS_PER_AMMO rounds
     p->active  = true;
     p->resting = false;
     p->life    = 0;
     p->pos = {spaceShip.offset.x + tip.x, spaceShip.offset.y + tip.y};
     p->velocity = {velocity.x + dir.x * MUZZLE_SPEED, velocity.y + dir.y * MUZZLE_SPEED};
 
-    velocity.x -= dir.x * RECOIL;
-    velocity.y -= dir.y * RECOIL;
+    // Recoil: a fraction of the round's momentum, as an impulse through the base.
+    applyImpulse({ -dir.x * MUZZLE_SPEED * p->mass * RECOIL_FRACTION,
+                   -dir.y * MUZZLE_SPEED * p->mass * RECOIL_FRACTION });
     landed = false;
     sfx::play(sfx::Fire, spaceShip.offset.x, 1.f, id);
 }
@@ -932,7 +935,15 @@ Ship::bump(const Pellet& p) {
     PhysicsBody pellet = p;
     Point2D r = { p.pos.x - spaceShip.offset.x, p.pos.y - spaceShip.offset.y };
     float len = sqrtf(r.x * r.x + r.y * r.y);
-    Point2D n = len > 0.0f ? Point2D{ r.x / len, r.y / len } : Point2D{ 0.0f, 1.0f }; // pellet -> ship
+    // Normal: the pellet's travel direction relative to the ship, pointing
+    // other(pellet) -> this(ship) as resolveImpulseAt expects. NOT the radial
+    // direction: radial passes through the centre by construction, so r x n
+    // would be 0 and no hit could ever spin the ship. (Both mistakes were made
+    // once; both are covered by collision_tests.)
+    Point2D dv = { p.velocity.x - velocity.x, p.velocity.y - velocity.y };
+    float dlen = sqrtf(dv.x * dv.x + dv.y * dv.y);
+    Point2D n = dlen > 0.0f ? Point2D{ dv.x / dlen, dv.y / dlen }
+              : (len > 0.0f ? Point2D{ -r.x / len, -r.y / len } : Point2D{ 0.0f, 1.0f });
     resolveImpulseAt(pellet, n, r, { 0.0f, 0.0f });
     angVel = fmaxf(-SHIP_SPIN_MAX, fminf(SHIP_SPIN_MAX, angVel));
     landed = false;
