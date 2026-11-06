@@ -48,8 +48,8 @@ const float ANGLE_FACTOR    = 0.0004;
 // Ship-on-ship rigid-body collision (Phase 1: linear momentum).
 const float SHIP_MASS        = 1.0f;    // both ships equal mass
 const float SHIP_THRUST      = VELOCITY_FACTOR * SHIP_MASS;
-const float SHIP_INERTIA     = 0.01f;   // moment of inertia; tune: smaller = spinnier. 0.003 hit the spin cap on a head-on (energy sink)
-const float SHIP_SPIN_MAX    = 0.06f;   // rad/frame cap after a collision so ships never pinwheel // impulse per frame of burn; feel preserved at mass 1
+const float SHIP_INERTIA     = 0.0025f; // moment of inertia; tune: smaller = spinnier (playtest: 0.01 too tame, pellets barely spun)
+const float SHIP_SPIN_MAX    = 0.20f;   // rad/frame cap after a collision so ships never pinwheel
 const float SHIP_RESTITUTION = 0.6f;    // e: 1=elastic, 0=inelastic; lowered by damage later
 
 const float GROUND = -1.0;
@@ -130,7 +130,7 @@ struct Pellet : PhysicsBody {
     int  life    = 0;
     bool active  = false;
     bool resting = false;
-    Pellet() { mass = 0.6f; restitution = PELLET_BOUNCE; drag = 1.0f; }   // vs ship's 1.0: a real wallop (0.15 -> 0.3 -> 0.6 by playtest)
+    Pellet() { mass = 0.3f; restitution = PELLET_BOUNCE; drag = 1.0f; }   // vs ship's 1.0: a real wallop (0.15 -> 0.3 -> 0.6 by playtest)
 };
 
 struct Debris : PhysicsBody {   // one hull edge flung free, endpoints relative to pos

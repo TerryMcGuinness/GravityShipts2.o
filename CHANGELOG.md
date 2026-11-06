@@ -12,6 +12,9 @@ as part of the same work (see .github/copilot-instructions.md).
 ## [Unreleased]
 
 ### Added
+- Tuning from TV playtest: pellet mass back to 0.3 (0.6 shoved too much),
+  SHIP_INERTIA 0.01 -> 0.0025 (spin was too tame), SHIP_SPIN_MAX 0.06 -> 0.20.
+  Net: half the shove, double the spin per pellet hit; ship rams spin ~4x.
 - Playtest fixes (TV, 2026-11-06): Ship::bump had its contact normal
   backwards (ship->pellet instead of pellet->ship), so the solver saw a
   separating pair and EVERY pellet hit on a ship was a silent no-op; the

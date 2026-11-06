@@ -106,3 +106,12 @@ bounceOffStatic; ship motion via integrate()/applyImpulse. All 4 CTest suites
 green. Phase 2 not started -- next session begins at step 1 (moment of
 inertia + angular velocity on PhysicsBody; Ship::ang already exists). Needs
 convexMTV to also return the contact point (step 2). Branch name: `ship_spin`.
+
+### Phase 2 status (2026-11-06, evening) -- DONE, merged
+Coupled linear+angular impulse live (resolveImpulseAt); ships + pellets spin.
+Tuned on the TV: pellet mass 0.3, SHIP_INERTIA 0.0025, SHIP_SPIN_MAX 0.20,
+RECOIL_FRACTION 0.05, 10 rounds per ammo dot. GS_INFINITE_AMMO=1 for testing.
+Next session: (1) hit flash / debug vector overlay (physics.h TODO) so hits read
+on screen; (2) AI pilot: fuel budget + ambush tactics -- "Claude plays by proxy";
+(3) HUD balls-left indicator must not look like a ball (plan.md); (4) check
+whether ship-ship rams now over-spin at inertia 0.0025.
