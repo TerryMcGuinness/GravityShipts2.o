@@ -239,6 +239,7 @@ Ship::reset(Point2D resetPoint) {
         spaceShip.location[i].y = spaceShip.vertices[i].y + resetPoint.y;
     }
     velocity.x = 0.0 ; velocity.y = 0.0 ;
+    mass = SHIP_MASS; restitution = SHIP_RESTITUTION;   // PhysicsBody fields
     
     landed = false ;
     spaceShip.ball.ballhit = false ;
@@ -444,7 +445,7 @@ Ship::resolveCollision(Ship& other) {
     float nx = mtv.x / len, ny = mtv.y / len;   // unit normal, pushes A off B
 
     // Positional correction: split the separation by mass (equal -> half each).
-    float invA = 1.0f / mass, invB = 1.0f / other.mass;
+    float invA = invMass(), invB = other.invMass();
     float invSum = invA + invB;
     float sepA = (invA / invSum), sepB = (invB / invSum);
     spaceShip.offset.x += mtv.x * sepA;  spaceShip.offset.y += mtv.y * sepA;
@@ -454,20 +455,9 @@ Ship::resolveCollision(Ship& other) {
         other.spaceShip.location[i].x -= mtv.x * sepB;  other.spaceShip.location[i].y -= mtv.y * sepB;
     }
 
-    // Relative velocity along the normal (A relative to B).
-    float rvx = velocity.x - other.velocity.x;
-    float rvy = velocity.y - other.velocity.y;
-    float vn = rvx * nx + rvy * ny;
-    if (vn >= 0.0f) return false;          // already separating: no impulse, no stick
-
-    // Impulse magnitude: j = -(1+e) vn / (1/mA + 1/mB). Use the softer (more
-    // damaged) ship's restitution so damage reads as a deader collision.
-    float e = fminf(restitution, other.restitution);
-    float j = -(1.0f + e) * vn / invSum;
-
-    velocity.x += (j * invA) * nx;  velocity.y += (j * invA) * ny;
-    other.velocity.x -= (j * invB) * nx;  other.velocity.y -= (j * invB) * ny;
-    return true;
+    // Impulse along the normal: the one shared law (momentum conserved, pair
+    // restitution = min so damage reads as a deader collision).
+    return resolveImpulse(other, { nx, ny });
 }
 
 // Returns true on an actual impact (ship moving into the pad).
@@ -489,11 +479,8 @@ Ship::bounceOffBase(const Point2D* base) {
     float len = sqrtf(mtv.x * mtv.x + mtv.y * mtv.y);
     if (len == 0.0f) return false;
     float nx = mtv.x / len, ny = mtv.y / len;
-    float vn = velocity.x * nx + velocity.y * ny;
-    if (vn >= 0.0f) return false;
-    velocity.x -= 2.0f * vn * nx;
-    velocity.y -= 2.0f * vn * ny;
-    return true;
+    // Pad side is immovable: one body, one normal, ship's own restitution.
+    return bounceOffStatic({ nx, ny }, restitution);
 }
 
 void
@@ -529,7 +516,7 @@ Ship::inBounds(void) {
             spaceShip.location[i].y += push;
         // Reflect only when moving into the ground, else a spinning ship flip-flops and sinks.
         if( velocity.y < 0.0f ) {
-            velocity.y = -velocity.y;
+            bounceOffStatic({ 0.0f, 1.0f }, restitution);   // ground: infinite mass, e = ship's
             if (velocity.y > 0.0004f)
                 sfx::play(sfx::Thud, spaceShip.offset.x, fminf(1.f, velocity.y / 0.008f), id);
         }
@@ -560,7 +547,7 @@ Ship::inBounds(void) {
           }
         } else if( velocity.y < 0.0f ) {
             sfx::play(sfx::Thud, spaceShip.offset.x, fminf(1.f, fabsf(velocity.y) / 0.008f), id);
-            velocity.y *= -1.0f;
+            bounceOffStatic({ 0.0f, 1.0f }, restitution);   // pad top, same law as the ground
         }
     }
     

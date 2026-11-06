@@ -96,5 +96,14 @@ int main() {
     }
 
     if (failures == 0) std::cout << "all collision tests passed\n";
+    // --- Ship IS a PhysicsBody: static bounces use its restitution, not a sign flip ---
+    {
+        Ship s = makeShip(0.0f, 0.5f, 0.0f, -1.0f, 0.6f);
+        PhysicsBody& body = s;                      // must upcast
+        check(body.bounceOffStatic({0.0f, 1.0f}, s.restitution), "ship ground bounce fires");
+        check(std::fabs(s.velocity.y - 0.6f) < 1e-6f, "ship ground bounce keeps e=0.6 of speed (was 100%)");
+        check(!body.bounceOffStatic({0.0f, 1.0f}, s.restitution), "moving away: no second bounce");
+    }
+
     return failures ? 1 : 0;
 }

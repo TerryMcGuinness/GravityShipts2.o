@@ -1,3 +1,4 @@
+#include <cmath>
 #include "gameplay.h"
 #include "sound.h"
 
@@ -81,16 +82,18 @@ bool updateShip(Ship& ship) {
         }
     }
     if (ship.hitOtherBall) {
-        ship.velocity.x *= -1;
-        ship.velocity.y *= -1;
-        if (ship.spaceShip.location[0].x < ship.spaceShip.ball.ballLocation.x)
-            ship.spaceShip.offset.x -= 0.005;
-        else
-            ship.spaceShip.offset.x += 0.005;
-        if (ship.spaceShip.location[0].y > ship.spaceShip.ball.ballLocation.y)
-            ship.spaceShip.offset.y += 0.005;
-        else
-            ship.spaceShip.offset.y -= 0.005;
+        // The other player's ball is immovable here: bounce along the normal
+        // from ball centre to ship centre with the ship's restitution (was a
+        // placeholder that flipped both velocity components).
+        float nx = ship.spaceShip.offset.x - ship.otherShipBall.ballLocation.x;
+        float ny = ship.spaceShip.offset.y - ship.otherShipBall.ballLocation.y;
+        float len = sqrtf(nx * nx + ny * ny);
+        if (len > 0.0f) {
+            nx /= len; ny /= len;
+            ship.bounceOffStatic({ nx, ny }, ship.restitution);
+            ship.spaceShip.offset.x += nx * 0.005f;   // nudge out of the ball
+            ship.spaceShip.offset.y += ny * 0.005f;
+        }
         ship.hitOtherBall = false;
     }
     return true;

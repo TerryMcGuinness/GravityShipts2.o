@@ -11,7 +11,21 @@ as part of the same work (see .github/copilot-instructions.md).
 
 ## [Unreleased]
 
-### Added
+### Changed
+- Ship now derives from PhysicsBody. velocity/mass/restitution come from the
+  base; Ship::resolveCollision keeps the SAT contact + mass-split separation and
+  delegates the impulse to PhysicsBody::resolveImpulse. Position stays on
+  spaceShip.offset (hull anchor); ships do not use the base integrate().
+- The last four placeholder bounces are now the shared law (bounceOffStatic
+  with the ship's restitution, so damage will read everywhere):
+  ground (was velocity.y = -velocity.y), pad top (was *= -1), pad sides in
+  bounceOffBase (was a 2*vn full-elastic reflect), and the other player's ball
+  (was flipping BOTH velocity components; now reflects along the ball->ship
+  normal and nudges the ship out along it).
+- collision_tests: new case upcasting Ship to PhysicsBody& and checking a
+  ground bounce keeps e=0.6 of the speed instead of 100%.
+
+### Added (real_balls, merged to main)
 - Pellet, Debris and Spark now derive from PhysicsBody: pos/velocity/mass/
   restitution/drag come from the base. Their four hand-rolled integrate-and-
   bounce loops are collapsed onto PhysicsBody::integrate() (gravity + per-body

@@ -162,7 +162,12 @@ randomRange(float min, float max);
 
 void drawText(std::string text, int x, int y);
 
-class Ship {
+class Ship : public PhysicsBody {
+    // Ship IS a PhysicsBody: velocity/mass/restitution live in the base and
+    // every bounce goes through resolveImpulse / bounceOffStatic. Position
+    // stays on spaceShip.offset (the hull geometry is anchored there); the
+    // base `pos` and integrate() are NOT used by ships -- updatePosition()
+    // owns thrust, rotation and gravity.
 
 private:
     
@@ -227,9 +232,8 @@ public:
     bool hitOtherBall;
     
     float ang ;
-    Point2D velocity ;
-    float mass = SHIP_MASS;            // equal for both ships (Phase 1)
-    float restitution = SHIP_RESTITUTION; // per-ship; damage can lower it later
+    // velocity, mass (SHIP_MASS) and restitution (SHIP_RESTITUTION, lowered by
+    // damage later) are inherited from PhysicsBody; set in the constructor.
     // Resolve a Newtonian impulse against another ship along the SAT normal.
     // Reads both ships' mass/velocity/hull, writes post-collision velocities.
     bool resolveCollision(Ship& other);
